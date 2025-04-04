@@ -223,7 +223,9 @@ This server provides the following tools for interacting with Jupyter:
 
 ## Troubleshooting
 
-If you encounter issues during setup or usage, please consult the detailed troubleshooting guide which includes solutions found during debugging: `TROUBLESHOOTING.md`
+If you encounter issues during setup or usage, please consult the detailed troubleshooting guide which includes solutions found during debugging.
+
+➡️ **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)**
 
 ## Building from Source
 
