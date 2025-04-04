@@ -9,8 +9,6 @@ This project provides a [Model Context Protocol (MCP)](https://modelcontextproto
 
 <img src="assets/jupyter-extended-demo.gif" alt="Jupyter MCP Demo GIF" width="700">
 
-This is an **extended fork** of the original `jupyter-mcp-server` by Datalayer, Inc. This version, significantly extended and debugged, expands upon the original functionality, fixing numerous issues and offering a much wider range of tools (15+ tools compared to the original 2-3) for manipulating notebooks, executing code, managing files, and interacting with the kernel.
-
 ## Features
 
 * Connects MCP clients (e.g., Claude Desktop) to a running JupyterLab instance.
@@ -240,6 +238,8 @@ docker build -t jupyter-mcp-server:latest .
 ```
 
 ## License and Copyright
+
+This is an **extended fork** of the original `jupyter-mcp-server` by Datalayer, Inc. This version, significantly extended and debugged, expands upon the original functionality, fixing numerous issues and offering a much wider range of tools (15+ tools compared to the original 2-3) for manipulating notebooks, executing code, managing files, and interacting with the kernel.
 
 This project is licensed under the BSD 3-Clause License. See the LICENSE file for the full text.
 
