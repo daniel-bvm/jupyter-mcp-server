@@ -7,7 +7,7 @@
 
 This project provides a [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server that enables rich, interactive communication between AI models (like Claude) or other MCP clients and live Jupyter notebooks running in JupyterLab.
 
-![Jupyter MCP Demo GIF](assets/jupyter-extended-demo.gif)
+<img src="assets/jupyter-extended-demo.gif" alt="Jupyter MCP Demo GIF" width="800">
 
 This is an **extended fork** of the original `jupyter-mcp-server` by Datalayer, Inc. This version, significantly extended and debugged, expands upon the original functionality, fixing numerous issues and offering a much wider range of tools (15+ tools compared to the original 2-3) for manipulating notebooks, executing code, managing files, and interacting with the kernel.
 
