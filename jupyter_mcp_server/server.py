@@ -1,23 +1,20 @@
 # Copyright (c) 2023-2024 Datalayer, Inc.
+# Copyright (c) 2025 Alexander Isaev
 # BSD 3-Clause License
+
 import re
-import traceback # For more detailed error logging if needed
 import logging
 import os
 import asyncio # Make sure asyncio is imported
 from typing import Any, List, Dict, Optional # Import necessary types
 import nbformat
 import requests
-import json
 from urllib.parse import urljoin, quote
 from functools import partial
 import io
 from PIL import Image # If Pillow is installed
 import base64
-import uuid
-import mimetypes
-from pathlib import Path
-from pycrdt import Text as YText, Map as YMap # Import YText and YMap
+from pycrdt import Array as YArray, Map as YMap, Text as YText
 
 from jupyter_kernel_client import KernelClient
 from jupyter_nbmodel_client import (
@@ -133,7 +130,9 @@ async def _jupyter_api_request(method: str, api_path: str, **kwargs) -> requests
         logger.error(f"Jupyter API request failed for {method} {full_url}: {e}", exc_info=False) # Log less verbose error
         # Re-raise a more specific error maybe, or let the tool handle it
         raise ConnectionError(f"API request failed: {e}") from e
+    
 
+        
 # --- MCP Tools ---
 
 @mcp.tool()
@@ -309,9 +308,26 @@ def set_target_notebook(new_notebook_path: str) -> str:
 
 @mcp.tool()
 async def add_cell(content: str, cell_type: str, index: Optional[int] = None) -> str:
-    """Adds a new cell with the specified content and type at a given index.
-       If index is None or invalid, appends the cell to the end.
+    """Adds a new cell with specified content and type to the notebook.
+
+    Ensures correct Yjs types are used internally for synchronization.
+    If the provided index is None or out of bounds, the cell will be appended
+    to the end of the notebook.
+
+    Args:
+        content (str): The source content (code or markdown) for the new cell.
+        cell_type (str): The type of the cell. Must be either 'code' or 'markdown'.
+        index (Optional[int]): The 0-based index at which to insert the new cell.
+            If None or invalid, the cell is appended to the end. Defaults to None.
+
+    Returns:
+        str: A confirmation message indicating the type of cell added and its
+             final index (e.g., "Code cell added at index 5."), or an error
+             message string starting with "[Error: ...]".
     """
+    
+    global logger, SERVER_URL, TOKEN, NOTEBOOK_PATH # Add needed globals
+
     logger.info(f"Executing add_cell tool. Type: {cell_type}, Index: {index}")
     notebook: NbModelClient | None = None
     result_str = "[Error: Unknown issue adding cell]"
@@ -338,41 +354,52 @@ async def add_cell(content: str, cell_type: str, index: Optional[int] = None) ->
             insert_index = index
             logger.info(f"Attempting to insert cell at specified index {insert_index}.")
 
-        new_cell_dict: Dict[str, Any]
+        # --- Prepare cell dictionary with EXPLICIT Yjs types ---
+        new_cell_pre_ymap: Dict[str, Any] = {}
+        new_cell_pre_ymap["cell_type"] = cell_type
+        new_cell_pre_ymap["source"] = YText(content) # Create YText directly
+
         if cell_type == "code":
-            new_cell_dict = nbformat.v4.new_code_cell(source=content)
-        else:
-            new_cell_dict = nbformat.v4.new_markdown_cell(source=content)
+            # Use nbformat defaults for metadata, execution_count if desired
+            base_cell = nbformat.v4.new_code_cell(source="") # Use nbformat for structure/defaults
+            new_cell_pre_ymap["metadata"] = base_cell.metadata
+            new_cell_pre_ymap["outputs"] = YArray() # Explicitly create YArray
+            new_cell_pre_ymap["execution_count"] = None
+        else: # markdown
+            base_cell = nbformat.v4.new_markdown_cell(source="")
+            new_cell_pre_ymap["metadata"] = base_cell.metadata
+            # Markdown cells shouldn't have outputs/execution_count fields usually
+
+        # --- End preparation ---
 
         with ydoc.ydoc.transaction():
-            # Create YMap ensuring 'source' becomes YText automatically by ypy
-            # if nbformat dictionary is correctly structured.
-            # The direct YMap conversion should handle nested types like source string -> YText.
-            ycell_map = YMap(new_cell_dict)
+            # Convert the dictionary (which now contains Yjs objects) to a YMap
+            ycell_map = YMap(new_cell_pre_ymap)
             ycells.insert(insert_index, ycell_map)
 
         logger.info(f"Successfully inserted {cell_type} cell at index {insert_index}.")
         result_str = f"{cell_type.capitalize()} cell added at index {insert_index}."
 
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.5) # Use the longer delay
         await notebook.stop()
         notebook = None
         return result_str
     except Exception as e:
         logger.error(f"Error in add_cell (type: {cell_type}, index: {index}): {e}", exc_info=True)
         result_str = f"Error adding {cell_type} cell: {e}"
+        # Cleanup happens in finally
         return result_str
     finally:
         if notebook and notebook._NbModelClient__run and not notebook._NbModelClient__run.done():
-            try: await notebook.stop()
-            except Exception as final_e: logger.error(f"Error stopping notebook in finally (add_cell): {final_e}")
+             try: await notebook.stop()
+             except Exception as final_e: logger.error(f"Error stopping notebook in finally (add_cell): {final_e}")
 
 
 
-
+# More stable than add_cell
 @mcp.tool()
-async def add_code_cell(cell_content: str) -> str:
-    """Adds a code cell to the Jupyter notebook without executing it.
+async def add_code_cell_on_bottom(cell_content: str) -> str:
+    """Adds a code cell to the Jupyter notebook without executing it, on the bottom of the notebook.
 
     Args:
         cell_content: The code content for the new cell.
@@ -414,115 +441,120 @@ async def add_code_cell(cell_content: str) -> str:
              except Exception as final_e:
                  logger.error(f"Error stopping notebook in finally (add_code_cell): {final_e}")
 
-
+# --- Tool: execute_cell (Modified to use asyncio.to_thread) ---
 @mcp.tool()
 async def execute_cell(cell_index: int) -> str:
-    """Starts the execution of a specific code cell by its index.
-       Does not wait for completion or return output.
+    """
+    Sends a request to execute a specific code cell by its index,
+    running the request submission in a separate thread to potentially avoid
+    blocking the main server loop during slow kernel interactions.
+    Does NOT wait for kernel completion or guarantee execution success.
 
     Args:
         cell_index: The index of the cell to execute (0-based).
 
     Returns:
-        str: Confirmation message that execution was initiated.
+        str: Confirmation message that execution request was sent/dispatched, or an error message.
     """
-    logger.info(f"Executing execute_cell tool for cell index {cell_index}")
-    global kernel
+    global kernel, logger, SERVER_URL, TOKEN, NOTEBOOK_PATH # Add needed globals
+
+    logger.info(f"Executing execute_cell tool for cell index {cell_index} (using thread dispatch)")
+
+    # Check/Restart Kernel if needed
     if not kernel or not kernel.is_alive():
-        # ... (kernel restart logic as before) ...
         logger.warning("Kernel client not alive... Attempting restart.")
         try:
             kernel = KernelClient(server_url=SERVER_URL, token=TOKEN)
             kernel.start()
             logger.info("Kernel client restarted.")
+            if not kernel.is_alive(): raise RuntimeError("Kernel restart failed")
         except Exception as kernel_err:
             logger.error(f"Failed to restart kernel client: {kernel_err}", exc_info=True)
-            return f"Error: Kernel client connection failed. Cannot execute cell {cell_index}."
+            return f"[Error: Kernel client connection failed. Cannot send execution request for cell {cell_index}.]"
 
-    # We need NbModelClient only to get access to the execute_cell method
-    # which likely just acts as a proxy to the KernelClient anyway.
-    # Let's see if we can trigger execution without keeping the client open.
-    notebook = None
+    notebook: NbModelClient | None = None
+    result_str = f"[Error sending execution request for cell {cell_index}: Unknown issue]" # Default error message
     try:
-        # Create client, but we might not need to fully start/stop its WebSocket connection
+        # Need client briefly to get model and call execute
         notebook = NbModelClient(
-             get_jupyter_notebook_websocket_url(server_url=SERVER_URL, token=TOKEN, path=NOTEBOOK_PATH)
+            get_jupyter_notebook_websocket_url(server_url=SERVER_URL, token=TOKEN, path=NOTEBOOK_PATH)
         )
-        # Awareness patch might not even be needed if we don't connect WS, but keep for now
-        _try_set_awareness(notebook, "execute_cell")
-
-        # We need to ensure the notebook model is loaded to get the cell ID if execute_cell needs it
-        # Let's still start/sync briefly.
+        _try_set_awareness(notebook, "execute_cell") # Keep if needed
         await notebook.start()
         await notebook.wait_until_synced()
 
+        # Validate index
         ydoc = notebook._doc
         ycells = ydoc._ycells
-        if not (0 <= cell_index < len(ycells)):
-             await notebook.stop() # Stop if index invalid
-             return f"[Error: Cell index {cell_index} is out of bounds]"
+        num_cells = len(ycells) # Define num_cells here
+        if not (0 <= cell_index < num_cells):
+            result_str = f"[Error: Cell index {cell_index} out of bounds (0-{num_cells-1})]"
+            logger.warning(result_str)
+            # No need to stop client here, finally block will handle it
+            return result_str
 
-        logger.info(f"Initiating execution for cell index {cell_index}.")
-        # --- MODIFICATION: Don't create background task, just call directly? ---
-        # The NbModelClient.execute_cell might just send a message via the kernel client
-        # and return quickly without needing to be a background task itself.
-        # Let's try calling it directly first. If *this* blocks, then backgrounding is needed.
-        logger.info(f"Initiating execution for cell index {cell_index}.")
+        # Validate cell type
+        cell_data_check = ycells[cell_index]
+        if cell_data_check.get("cell_type") != "code":
+             result_str = f"[Error: Cell index {cell_index} is not a code cell]"
+             logger.warning(result_str)
+             # No need to stop client here, finally block will handle it
+             return result_str
 
-        # --- Add diagnostic logging ---
+        # --- Execute the potentially blocking call in a separate thread ---
         try:
-            cell_to_exec = ycells[cell_index]
-            logger.info(f"DEBUG: Type of cell object at index {cell_index}: {type(cell_to_exec)}")
-            if hasattr(cell_to_exec, 'get'): # Check if it's dict-like (or YMap-like)
-                source_obj = cell_to_exec.get("source")
-                logger.info(f"DEBUG: Type of source object at index {cell_index}: {type(source_obj)}")
-                logger.info(f"DEBUG: Content of source object: {str(source_obj)[:100]}...") # Log first 100 chars
-            else:
-                 logger.warning(f"DEBUG: Cell object at index {cell_index} is not dict-like.")
-        except Exception as log_err:
-            logger.error(f"DEBUG: Error during pre-execution logging: {log_err}")
-        # --- End diagnostic logging ---
-        
-        notebook.execute_cell(cell_index, kernel)
-        logger.info(f"Execution request sent for cell {cell_index}.")
+            logger.info(f"Dispatching execution request for cell {cell_index} to thread...")
+            # Run the synchronous 'notebook.execute_cell' in asyncio's default thread pool
+            # Pass the function and its arguments to to_thread
+            await asyncio.to_thread(
+                 notebook.execute_cell, # The function to run in thread
+                 cell_index,            # First argument to notebook.execute_cell
+                 kernel                 # Second argument to notebook.execute_cell
+            )
+            # If to_thread completes without error, the request was *sent* successfully
+            logger.info(f"Execution request successfully dispatched via thread for cell {cell_index}.")
+            result_str = f"Execution request sent for cell at index {cell_index}."
+        except Exception as exec_dispatch_err:
+             # Catch errors that happen *during the call* within the thread
+             logger.error(f"Error dispatching execute_cell to thread: {exec_dispatch_err}", exc_info=True)
+             result_str = f"[Error dispatching execution request for cell {cell_index}: {exec_dispatch_err}]"
+        # --- End threaded execution call ---
 
-        # --- MODIFICATION: REMOVE stop() ---
-        await asyncio.sleep(0.1) # Delay likely not needed if not stopping
-        # --- END MODIFICATION ---
-        notebook = None # Dereference
+        # Stop the client connection shortly after *dispatching* the request
+        # The actual kernel execution happens independently in the kernel process.
+        await asyncio.sleep(0.1)
+        # Ensure notebook client was successfully created before trying to stop
+        if notebook:
+            await notebook.stop()
+            notebook = None # Mark as stopped *after* successful stop
 
-        result_str = f"Execution request sent for cell at index {cell_index}."
-        logger.info(f"execute_cell tool completed. Preparing to return: {result_str}")
-        return result_str # Return immediately after *requesting* execution
+        return result_str
 
     except Exception as e:
-        logger.error(f"Error in execute_cell: {e}", exc_info=True)
-        result_str = f"Error executing cell {cell_index}: {e}"
-        # Ensure we attempt to stop if an error occurred after start
-        if notebook:
-            try: await notebook.stop()
-            except: pass
+        logger.error(f"Error during execute_cell setup/connection for index {cell_index}: {e}", exc_info=True)
+        # Ensure result_str reflects the outer error if it happens before dispatch attempt
+        if "Unknown issue" in result_str:
+            result_str = f"[Error in execute_cell setup for cell {cell_index}: {e}]"
+        # Cleanup happens in finally
         return result_str
-    # No finally block needed if we don't stop in the main path
-    
+    finally:
+        # Ensure stop is attempted if client was created and might still be running
+        if notebook and notebook._NbModelClient__run and not notebook._NbModelClient__run.done():
+             try:
+                 logger.warning("Stopping notebook client in finally block (execute_cell)")
+                 await notebook.stop()
+             except Exception as final_e:
+                 logger.error(f"Error stopping notebook in finally (execute_cell): {final_e}")
+
+# --- Tool: execute_all_cells ---
 @mcp.tool()
-async def execute_all_cells(cell_timeout: int = 60) -> str:
+async def execute_all_cells() -> str:
     """
-    Executes all code cells in the current target notebook sequentially from top to bottom.
-    Waits for each cell to complete or timeout before proceeding to the next.
-
-    Args:
-        cell_timeout: Max time (seconds) to wait for each individual cell execution. Default 60.
-
-    Returns:
-        str: Confirmation message indicating completion, or the first error/timeout encountered.
+    Sends execution requests sequentially for all code cells found in the notebook.
+    Does NOT wait for completion or report kernel-side errors/timeouts.
     """
-    logger.info(f"Executing execute_all_cells tool (cell timeout: {cell_timeout}s).")
-    global kernel # Use global kernel, ensure it's ready
-    notebook: NbModelClient | None = None
-    executed_count = 0
-    total_code_cells = 0
-    first_error_msg = None
+    global kernel, logger, SERVER_URL, TOKEN, NOTEBOOK_PATH # Add needed globals
+    logger.info(f"Executing execute_all_cells tool.")
 
     # Check/Restart Kernel if needed
     if not kernel or not kernel.is_alive():
@@ -531,83 +563,60 @@ async def execute_all_cells(cell_timeout: int = 60) -> str:
             kernel = KernelClient(server_url=SERVER_URL, token=TOKEN)
             kernel.start()
             logger.info("Kernel client restarted.")
+            if not kernel.is_alive(): raise RuntimeError("Kernel restart failed")
         except Exception as kernel_err:
             logger.error(f"Failed to restart kernel client: {kernel_err}", exc_info=True)
             return f"[Error: Kernel client connection failed. Cannot execute cells.]"
+
+    notebook: NbModelClient | None = None
+    total_code_cells = 0
+    cells_requested = 0
+    request_error = None # To store error during request sending
 
     try:
         notebook = NbModelClient(
             get_jupyter_notebook_websocket_url(server_url=SERVER_URL, token=TOKEN, path=NOTEBOOK_PATH)
         )
-        # No awareness patch needed here as we aren't primarily modifying structure via this client
         await notebook.start()
         await notebook.wait_until_synced()
 
         ydoc = notebook._doc
         ycells = ydoc._ycells
         num_cells = len(ycells)
-        logger.info(f"Found {num_cells} cells. Iterating to execute code cells.")
+        logger.info(f"Found {num_cells} cells. Iterating to send execution requests for code cells.")
 
         for i, cell_data in enumerate(ycells):
+            # Check cell type inside the loop
             if cell_data.get("cell_type") == "code":
                 total_code_cells += 1
-                # Skip empty code cells? Optional, for now execute them.
-                # source = str(cell_data.get("source", ""))
-                # if not source.strip():
-                #     logger.info(f"Skipping empty code cell {i}/{num_cells-1}.")
-                #     executed_count += 1 # Count as "executed" successfully
-                #     continue
-
-                logger.info(f"Requesting execution for cell {i}/{num_cells-1}...")
                 try:
-                    # Await the execute_cell call with the specified timeout
-                    result = await asyncio.wait_for(
-                        notebook.execute_cell(i, kernel),
-                        timeout=float(cell_timeout)
-                    )
-
-                    # Check the kernel's reply for errors
-                    status = result.get('status') if result else 'unknown'
-                    if status == 'error':
-                         error_content = result.get('error', {}) if result else {}
-                         err_msg = f"Error in cell {i}: {error_content.get('ename', 'Unknown')}: {error_content.get('evalue', '')}"
-                         logger.error(err_msg)
-                         first_error_msg = err_msg
-                         break # Stop processing on kernel error
-                    elif status != 'ok':
-                         logger.warning(f"Cell {i} finished with unexpected status: {status}")
-                         # Continue to next cell despite non-ok status? Yes.
-
-                    executed_count += 1
-                    logger.info(f"Cell {i} execution completed (status: {status}).")
-
-                except asyncio.TimeoutError:
-                    logger.error(f"Execution timed out for cell {i} after {cell_timeout}s.")
-                    first_error_msg = f"Execution timed out for cell {i} after {cell_timeout}s."
-                    break # Stop processing on timeout
-                except Exception as exec_err:
-                    logger.error(f"Unexpected error during notebook.execute_cell for index {i}: {exec_err}", exc_info=True)
-                    first_error_msg = f"Error occurred while executing cell {i}: {exec_err}"
-                    break # Stop processing on other errors
+                    logger.info(f"Sending execution request for code cell {i}/{num_cells-1}...")
+                    # Directly call the non-awaitable method
+                    notebook.execute_cell(i, kernel)
+                    cells_requested += 1
+                except Exception as send_err:
+                    # Catch errors ONLY during the *sending* of the request itself
+                    logger.error(f"Error sending execution request for cell {i}: {send_err}", exc_info=True)
+                    request_error = f"Error sending request for cell {i}: {send_err}"
+                    break # Stop trying to send more requests if one fails
 
         # --- Loop finished or broken ---
         result_str: str
-        if first_error_msg:
-            result_str = f"Execution stopped: {first_error_msg}. Processed {executed_count}/{total_code_cells} code cells."
+        if request_error:
+            result_str = f"Stopped sending requests due to error: {request_error}. Sent requests for {cells_requested}/{total_code_cells} code cells found."
         else:
-            result_str = f"Successfully executed all {total_code_cells} code cells."
+            result_str = f"Successfully sent execution requests for all {total_code_cells} code cells found."
 
-        # --- Crucial Delay before stopping client ---
-        await asyncio.sleep(0.5)
+        # Stop the client connection shortly after sending the last request
+        await asyncio.sleep(0.1) # Keep small delay maybe?
         await notebook.stop()
-        notebook = None
-        logger.info(f"execute_all_cells tool completed. Preparing to return: {result_str}")
+        notebook = None # Mark as stopped
+        logger.info(f"execute_all_cells tool completed sending requests. Preparing to return: {result_str}")
         return result_str
 
     except Exception as e:
-        logger.error(f"Error in execute_all_cells tool: {e}", exc_info=True)
-        result_str = f"Error during setup or iteration for execute_all_cells: {e}"
-        return result_str
+        logger.error(f"Error during setup or iteration for execute_all_cells: {e}", exc_info=True)
+        return f"Error during setup or iteration for execute_all_cells: {e}"
     finally:
         # Ensure stop is attempted if client was created and might still be running
         if notebook and notebook._NbModelClient__run and not notebook._NbModelClient__run.done():
@@ -616,6 +625,7 @@ async def execute_all_cells(cell_timeout: int = 60) -> str:
                  await notebook.stop()
              except Exception as final_e:
                  logger.error(f"Error stopping notebook in finally (execute_all_cells): {final_e}")
+
 
 @mcp.tool()
 async def get_cell_output(cell_index: int, wait_seconds: float = OUTPUT_WAIT_DELAY) -> str:
@@ -739,150 +749,281 @@ async def delete_cell(cell_index: int) -> str:
             try: await notebook.stop()
             except Exception as final_e: logger.error(f"Error stopping notebook in finally (delete_cell): {final_e}")
 
-                
 @mcp.tool()
 async def move_cell(from_index: int, to_index: int) -> str:
-    """Moves a cell from one index to another using Yjs array manipulation."""
-    logger.info(f"Executing move_cell tool from {from_index} to {to_index}")
+    """
+    Moves a cell from from_index to to_index by copying data, deleting original,
+    and inserting a new, correctly structured cell.
+    """
+    global logger, SERVER_URL, TOKEN, NOTEBOOK_PATH
+
+    logger.info(f"Executing move_cell tool from {from_index} to {to_index} (robust copy method)")
     notebook: NbModelClient | None = None
     result_str = f"[Error: Unknown issue in move_cell from {from_index} to {to_index}]"
     try:
         notebook = NbModelClient(
             get_jupyter_notebook_websocket_url(server_url=SERVER_URL, token=TOKEN, path=NOTEBOOK_PATH)
         )
-        # No awareness patch needed here
         await notebook.start()
         await notebook.wait_until_synced()
 
         ydoc = notebook._doc
-        ycells = ydoc._ycells
+        ycells = ydoc._ycells # This is the pycrdt.Array
         num_cells = len(ycells)
 
-        # Validate indices before transaction
+        # --- Validation ---
         if not (0 <= from_index < num_cells):
             result_str = f"[Error: from_index {from_index} is out of bounds (0-{num_cells-1})]"
-        elif not (0 <= to_index <= num_cells): # Target can be end
+        elif not (0 <= to_index <= num_cells): # Allow moving to the very end
              result_str = f"[Error: to_index {to_index} is out of bounds (0-{num_cells})]"
+        elif from_index == to_index:
+             result_str = f"Cell is already at index {from_index}." # No move needed
         else:
-            # --- MODIFICATION: Use Yjs array move ---
-            logger.info(f"Attempting to move cell from {from_index} to {to_index} using ycells.move_to()")
-            with ydoc.ydoc.transaction():
-                ycells.move_to(to_index, from_index) # ypy uses move_to(target_index, current_index)
-            # --- END MODIFICATION ---
-            logger.info(f"Moved cell from {from_index} to {to_index}.")
-            result_str = f"Cell moved from index {from_index} to {to_index}."
+            # --- Perform Copy / Delete / Create / Insert ---
+            logger.info(f"Attempting robust move: Copying {from_index}, Deleting {from_index}, Inserting new at {to_index}")
+            try:
+                # Perform operations within a single transaction
+                with ydoc.ydoc.transaction():
+                    # 1. Copy data from source cell, converting Yjs types to Python types
+                    source_cell_y = ycells[from_index]
+                    # Safely get data, providing defaults for missing keys
+                    copied_data = {
+                        "cell_type": source_cell_y.get("cell_type", "code"), # Default to code if missing? Or error?
+                        "source": str(source_cell_y.get("source", "")),
+                        "metadata": dict(source_cell_y.get("metadata", YMap())),
+                    }
+                    cell_type = copied_data["cell_type"]
+                    if cell_type == "code":
+                        copied_data["outputs"] = list(source_cell_y.get("outputs", YArray()))
+                        copied_data["execution_count"] = source_cell_y.get("execution_count") # Can be None
 
-        if "Error" in result_str:
-             logger.warning(result_str)
+                    # 2. Delete the original cell (use pop for potential direct object reuse if needed later, but del is fine)
+                    del ycells[from_index]
+                    # item_to_move_data = ycells.pop(from_index) # Alternative to del
+
+                    # 3. Prepare the dictionary for the NEW YMap, converting back to Yjs types
+                    new_cell_pre_ymap: Dict[str, Any] = {}
+                    new_cell_pre_ymap["cell_type"] = cell_type
+                    new_cell_pre_ymap["source"] = YText(copied_data["source"])
+                    new_cell_pre_ymap["metadata"] = YMap(copied_data.get("metadata", {}))
+
+                    if cell_type == "code":
+                         # Convert Python list of outputs back to YArray
+                         new_cell_pre_ymap["outputs"] = YArray(copied_data.get("outputs", []))
+                         # Add execution_count only if it was present and not None in the copy
+                         exec_count = copied_data.get("execution_count")
+                         if exec_count is not None:
+                              new_cell_pre_ymap["execution_count"] = exec_count
+                    # else: # Markdown - Ensure outputs/count are not present if strict schema needed
+                    #    if "outputs" in new_cell_pre_ymap: del new_cell_pre_ymap["outputs"]
+                    #    if "execution_count" in new_cell_pre_ymap: del new_cell_pre_ymap["execution_count"]
+
+
+                    # 4. Insert the NEW cell YMap at the target index
+                    # Adjust insertion index if moving item to later position
+                    # Example: move 0 -> 2 in [a,b,c]. del ycells[0] -> [b,c]. insert at 2 -> [b,c,a]. Correct.
+                    # Example: move 2 -> 0 in [a,b,c]. del ycells[2] -> [a,b]. insert at 0 -> [c,a,b]. Correct.
+                    # It seems direct insertion at to_index works correctly after deletion.
+                    ycells.insert(to_index, YMap(new_cell_pre_ymap))
+
+                logger.info(f"Robust move successful: Cell from {from_index} inserted at {to_index}.")
+                result_str = f"Cell moved from index {from_index} to {to_index}."
+            except KeyError as ke:
+                 # Catch errors if expected keys are missing during copy (e.g., missing cell_type?)
+                 logger.error(f"Missing key during cell copy/move from {from_index}: {ke}", exc_info=True)
+                 result_str = f"[Error: Cell structure invalid during move - missing key {ke}]"
+            except Exception as move_e:
+                 # Catch other errors specifically during the move transaction
+                 logger.error(f"Error during robust move transaction from {from_index} to {to_index}: {move_e}", exc_info=True)
+                 result_str = f"[Error during move operation: {move_e}]"
+            # --- End Copy / Delete / Create / Insert ---
+
+        # Handle validation or transaction errors before stopping client
+        # Check result_str which might have been updated by exception handling
+        if "Error" in result_str or "already at index" in result_str:
+             logger.warning(f"Move cell result: {result_str}")
              if notebook and notebook._NbModelClient__run and not notebook._NbModelClient__run.done():
-                  await notebook.stop()
-                  notebook = None
+                   try: await notebook.stop()
+                   except Exception: pass
+                   notebook = None
              return result_str
 
-        await asyncio.sleep(0.5) # Delay after modification
+        # Success case
+        await asyncio.sleep(0.5) # Keep delay after modification
         await notebook.stop()
         notebook = None
         return result_str
+
     except Exception as e:
-        logger.error(f"Error in move_cell from {from_index} to {to_index}: {e}", exc_info=True)
+        # Catch errors during setup/connection
+        logger.error(f"Error in move_cell setup from {from_index} to {to_index}: {e}", exc_info=True)
         result_str = f"Error moving cell from {from_index} to {to_index}: {e}"
+        # Cleanup happens in finally
         return result_str
     finally:
+        # Ensure stop is attempted if client was created and might still be running
         if notebook and notebook._NbModelClient__run and not notebook._NbModelClient__run.done():
             try: await notebook.stop()
             except Exception as final_e: logger.error(f"Error stopping notebook in finally (move_cell): {final_e}")
+
+            
 @mcp.tool()
-async def merge_cells(indices: list[int]) -> str:
-    """Merges adjacent cells into the first cell, deleting the others."""
-    logger.info(f"Executing merge_cells tool for indices {indices}")
+async def move_cell(from_index: int, to_index: int) -> str:
+    """
+    Moves a cell from from_index to to_index by deleting the original reference
+    and re-inserting it at the target index within a transaction.
+    """
+    global logger, SERVER_URL, TOKEN, NOTEBOOK_PATH # Add needed globals
+
+    logger.info(f"Executing move_cell tool from {from_index} to {to_index} (simple del/insert method)")
     notebook: NbModelClient | None = None
-    result_str = f"[Error: Unknown issue merging cells {indices}]"
-    if not indices or len(indices) < 2:
-        return "[Error: Need at least two consecutive indices to merge.]"
-    indices.sort()
-    if any(indices[i+1] != indices[i] + 1 for i in range(len(indices) - 1)):
-        return f"[Error: Indices {indices} are not consecutive.]"
-
-    target_index = indices[0]
-    indices_to_delete = indices[1:]
-
+    result_str = f"[Error: Unknown issue in move_cell from {from_index} to {to_index}]"
     try:
         notebook = NbModelClient(
             get_jupyter_notebook_websocket_url(server_url=SERVER_URL, token=TOKEN, path=NOTEBOOK_PATH)
         )
+        # No awareness patch needed here usually for move
         await notebook.start()
         await notebook.wait_until_synced()
 
         ydoc = notebook._doc
-        ycells = ydoc._ycells
+        ycells = ydoc._ycells # This is the pycrdt.Array
         num_cells = len(ycells)
 
-        if not (0 <= target_index < num_cells and all(0 <= i < num_cells for i in indices_to_delete)):
-             result_str = f"[Error: Indices {indices} out of bounds (0-{num_cells-1})]"
-             logger.warning(result_str)
+        # --- Validation ---
+        if not (0 <= from_index < num_cells):
+            result_str = f"[Error: from_index {from_index} is out of bounds (0-{num_cells-1})]"
+        elif not (0 <= to_index <= num_cells): # Allow moving to the very end (index num_cells)
+             result_str = f"[Error: to_index {to_index} is out of bounds (0-{num_cells})]"
+        elif from_index == to_index:
+             result_str = f"Cell is already at index {from_index}." # No move needed
+        else:
+            # --- Perform simple Delete / Insert of same reference ---
+            logger.info(f"Attempting simple move: Deleting {from_index}, Inserting reference at {to_index}")
+            try:
+                # Perform operations within a single transaction
+                with ydoc.ydoc.transaction():
+                    # 1. Get the item reference (this is a YMap)
+                    item_to_move = ycells[from_index]
+
+                    # 2. Delete from the original position
+                    del ycells[from_index]
+
+                    # 3. Insert the same item reference at the target position
+                    # pycrdt's insert should handle index adjustments correctly within transaction.
+                    ycells.insert(to_index, item_to_move)
+
+                logger.info(f"Simple move successful: Cell from {from_index} moved to {to_index}.")
+                result_str = f"Cell moved from index {from_index} to {to_index}."
+            except Exception as move_e:
+                 # Catch errors specifically during the move transaction
+                 logger.error(f"Error during simple move transaction from {from_index} to {to_index}: {move_e}", exc_info=True)
+                 result_str = f"[Error during move operation: {move_e}]"
+            # --- End Delete / Insert block ---
+
+        # Handle validation or transaction errors before stopping client
+        if "Error" in result_str or "already at index" in result_str:
+             logger.warning(f"Move cell result: {result_str}")
              if notebook and notebook._NbModelClient__run and not notebook._NbModelClient__run.done():
-                  await notebook.stop()
-                  notebook = None
+                   try: await notebook.stop()
+                   except Exception: pass # Ignore stop errors if only validation failed
+                   notebook = None
              return result_str
 
-        # Perform merge and delete within a single transaction
-        with ydoc.ydoc.transaction():
-            sources_to_merge = []
-            final_cell_type = "markdown"
-            for i in indices:
-                 cell_data = ycells[i]
-                 # Convert YText to str for joining
-                 sources_to_merge.append(str(cell_data.get("source", "")))
-                 if cell_data.get("cell_type") == "code":
-                     final_cell_type = "code"
-
-            merged_source = "\n".join(sources_to_merge)
-
-            # Modify first cell using YText methods
-            target_cell = ycells[target_index]
-            source_obj = target_cell.get("source")
-            if isinstance(source_obj, YText):
-                # Correct way for pycrdt.Text: delete existing, insert new
-                existing_content = str(source_obj)
-                if existing_content:
-                    source_obj.delete(0, len(existing_content))
-                source_obj.insert(0, merged_source)
-            else:
-                # If it's not YText (or doesn't exist), replace/create it
-                target_cell["source"] = YText(merged_source)
-
-            target_cell["cell_type"] = final_cell_type
-            if "outputs" in target_cell: target_cell["outputs"].clear()
-            if "execution_count" in target_cell: target_cell["execution_count"] = None
-            logger.info(f"Merging into cell {target_index}. New type: {final_cell_type}. Deleting {indices_to_delete}")
-
-            # Delete subsequent cells in reverse order
-            for i in sorted(indices_to_delete, reverse=True):
-                 del ycells[i]
-
-        result_str = f"Cells {indices} merged into index {target_index}."
-
-        await asyncio.sleep(0.5)
+        # Success case
+        await asyncio.sleep(0.5) # Keep delay after modification
         await notebook.stop()
         notebook = None
         return result_str
+
     except Exception as e:
-        logger.error(f"Error in merge_cells for indices {indices}: {e}", exc_info=True)
-        result_str = f"Error merging cells {indices}: {e}"
+        # Catch errors during setup/connection
+        logger.error(f"Error in move_cell setup from {from_index} to {to_index}: {e}", exc_info=True)
+        result_str = f"Error moving cell from {from_index} to {to_index}: {e}"
+        # Cleanup happens in finally
         return result_str
     finally:
+        # Ensure stop is attempted if client was created and might still be running
         if notebook and notebook._NbModelClient__run and not notebook._NbModelClient__run.done():
             try: await notebook.stop()
-            except Exception as final_e: logger.error(f"Error stopping notebook in finally (merge_cells): {final_e}")
+            except Exception as final_e: logger.error(f"Error stopping notebook in finally (move_cell): {final_e}")
+            
+@mcp.tool()
+async def search_notebook_cells(search_string: str, case_sensitive: bool = False) -> List[Dict[str, Any]]:
+    """
+    Searches through all cells in the current notebook for a given string in their source code.
 
+    Args:
+        search_string: The string of code or text to search for within cell sources.
+        case_sensitive: Set to True for a case-sensitive search (default is False, ignoring case).
 
+    Returns:
+        A list of dictionaries, where each dictionary represents a cell containing
+        the search string. Each dictionary includes 'index', 'cell_type', and 'source'.
+        Returns an empty list if the string is not found or if there's an error reading cells.
+        Example return: [{'index': 0, 'cell_type': 'code', 'source': 'import pandas as pd\nprint("hello")'}]
+    """
+    logger.info(f"Executing search_notebook_cells tool for: '{search_string}' (case_sensitive={case_sensitive})")
+    matches = []
+
+    try:
+        # 1. Get all cell data using the existing tool
+        # Assumes get_all_cells() returns a list of dicts like [{'index': 0, 'cell_type': 'code', 'source': '...', 'execution_count': None}, ...]
+        # Or returns [{'error': '...'}] on failure
+        all_cells = await get_all_cells()
+
+        # 2. Check for errors from get_all_cells
+        # Handle potential error format like [{"error": "..."}]
+        if not all_cells or (isinstance(all_cells, list) and len(all_cells) > 0 and isinstance(all_cells[0].get("error"), str)):
+             logger.error(f"Failed to retrieve cells from get_all_cells. Response: {all_cells}")
+             # Return empty list on error to indicate no matches found due to cell access failure
+             return []
+        # Handle case where get_all_cells didn't return a list (unexpected)
+        if not isinstance(all_cells, list):
+            logger.error(f"Unexpected response type from get_all_cells: {type(all_cells)}")
+            return []
+
+        # 3. Iterate and search through the cells
+        search_term = search_string if case_sensitive else search_string.lower()
+
+        for cell in all_cells:
+            # Ensure source exists and is a string before searching
+            source = cell.get("source") # get_all_cells should return source as string
+            if not isinstance(source, str):
+                # Log a warning if source is not a string, skip this cell
+                logger.warning(f"Cell {cell.get('index')} has non-string source: {type(source)}. Skipping.")
+                continue
+
+            source_to_search = source if case_sensitive else source.lower()
+
+            if search_term in source_to_search:
+                logger.info(f"Found search string in cell index {cell.get('index')}")
+                # Append relevant info for the matched cell
+                matches.append({
+                    "index": cell.get("index"),           # Get cell index
+                    "cell_type": cell.get("cell_type"),   # Get cell type
+                    "source": source                      # Return the original source content
+                })
+
+        logger.info(f"Search complete. Found {len(matches)} matches.")
+        return matches
+
+    except Exception as e:
+        logger.error(f"Unexpected error in search_notebook_cells: {e}", exc_info=True)
+        # Return empty list on any unexpected error during search processing
+        return []
 
 @mcp.tool()
 async def split_cell(cell_index: int, line_number: int) -> str:
-    """Splits a cell at a specific line number (1-based)."""
+    """
+    Splits a cell at a specific line number (1-based), ensuring correct Yjs types.
+    """
+    global logger, SERVER_URL, TOKEN, NOTEBOOK_PATH # Add needed globals
+
     logger.info(f"Executing split_cell tool for index {cell_index} at line {line_number}")
     notebook: NbModelClient | None = None
     result_str = f"[Error: Unknown issue splitting cell {cell_index}]"
+
     if line_number < 1:
         return "[Error: line_number must be 1 or greater]"
 
@@ -897,69 +1038,103 @@ async def split_cell(cell_index: int, line_number: int) -> str:
         ycells = ydoc._ycells
         num_cells = len(ycells)
 
+        # --- Validation ---
         if not (0 <= cell_index < num_cells):
-             result_str = f"[Error: Cell index {cell_index} out of bounds (0-{num_cells-1})]"
-             logger.warning(result_str)
-             if notebook and notebook._NbModelClient__run and not notebook._NbModelClient__run.done():
-                  await notebook.stop()
-                  notebook = None
-             return result_str
+            result_str = f"[Error: Cell index {cell_index} out of bounds (0-{num_cells-1})]"
+            logger.warning(result_str)
+            if notebook and notebook._NbModelClient__run and not notebook._NbModelClient__run.done():
+                 try: await notebook.stop()
+                 except Exception: pass
+                 notebook = None
+            return result_str
 
         cell_data_read = ycells[cell_index]
         original_source = str(cell_data_read.get("source", "")) # Read as string
-        original_cell_type = cell_data_read.get("cell_type", "markdown")
-        source_lines = original_source.splitlines(True)
+        original_cell_type = cell_data_read.get("cell_type", "code") # Default to code if missing? Safer.
+        source_lines = original_source.splitlines(True) # Keep line endings
 
-        if line_number > len(source_lines) + 1:
-             result_str = f"[Error: Line number {line_number} beyond end ({len(source_lines)} lines)]"
-             logger.warning(result_str)
-             if notebook and notebook._NbModelClient__run and not notebook._NbModelClient__run.done():
-                  await notebook.stop()
-                  notebook = None
-             return result_str
+        # Validate line_number (allow splitting *after* last line -> creates empty second cell)
+        if not (1 <= line_number <= len(source_lines) + 1):
+            result_str = f"[Error: Line number {line_number} is out of range (1-{len(source_lines) + 1})]"
+            logger.warning(result_str)
+            if notebook and notebook._NbModelClient__run and not notebook._NbModelClient__run.done():
+                 try: await notebook.stop()
+                 except Exception: pass
+                 notebook = None
+            return result_str
+        # --- End Validation ---
 
         new_cell_index = cell_index + 1
         with ydoc.ydoc.transaction():
-             source_part1 = "".join(source_lines[:line_number-1])
-             source_part2 = "".join(source_lines[line_number-1:])
-            
-             cell_data_write = ycells[cell_index]
-             source_obj = cell_data_write.get("source")
-             if isinstance(source_obj, YText):
-                 # Correct way for pycrdt.Text: delete existing, insert new
+            # 1. Calculate source parts
+            source_part1 = "".join(source_lines[:line_number-1])
+            source_part2 = "".join(source_lines[line_number-1:])
+
+            # 2. Update original cell (index `cell_index`)
+            cell_data_write = ycells[cell_index]
+            source_obj = cell_data_write.get("source")
+            # Update source using del slice / insert
+            if isinstance(source_obj, YText):
                  existing_content = str(source_obj)
                  if existing_content:
-                     source_obj.delete(0, len(existing_content))
-                 source_obj.insert(0, source_part1) # Insert the first part
-             else:
-                 # If it's not YText (or doesn't exist), replace/create it
+                     del source_obj[0 : len(existing_content)] # Use slice deletion
+                 source_obj.insert(0, source_part1) # Use insert
+            else:
+                 # If source wasn't YText or didn't exist, create it
                  cell_data_write["source"] = YText(source_part1)
 
-             if original_cell_type == "code":
-                 if "outputs" in cell_data_write: cell_data_write["outputs"].clear()
-                 if "execution_count" in cell_data_write: cell_data_write["execution_count"] = None
+            # Clean up outputs/count if it was a code cell
+            if original_cell_type == "code":
+                # Ensure outputs field is an empty YArray
+                outputs_obj = cell_data_write.get("outputs")
+                if isinstance(outputs_obj, YArray):
+                    outputs_obj.clear() # Clear existing YArray
+                else:
+                    # If not YArray or doesn't exist, create/replace it
+                    # Log warning only if it existed but wasn't YArray
+                    if outputs_obj is not None:
+                         logger.warning(f"Outputs field in split cell {cell_index} was not YArray ({type(outputs_obj)}). Replacing.")
+                    cell_data_write["outputs"] = YArray()
 
-            # Create new cell dict using nbformat
-             if original_cell_type == "code":
-                 new_cell_dict = nbformat.v4.new_code_cell(source=source_part2)
-             else:
-                 new_cell_dict = nbformat.v4.new_markdown_cell(source=source_part2)
+                # Ensure execution_count is None
+                cell_data_write["execution_count"] = None
 
-             # Convert to YMap and insert into YArray
-             logger.info(f"Splitting cell {cell_index}. Inserting new {original_cell_type} cell at index {new_cell_index}")
-             ycells.insert(new_cell_index, YMap(new_cell_dict))
+            # 3. Prepare the dictionary for the NEW cell with explicit Yjs types
+            new_cell_pre_ymap: Dict[str, Any] = {}
+            new_cell_pre_ymap["cell_type"] = original_cell_type
+            new_cell_pre_ymap["source"] = YText(source_part2) # Create YText directly
+
+            if original_cell_type == "code":
+                # Add default code cell metadata and ensure YArray for outputs
+                base_code_cell = nbformat.v4.new_code_cell(source="") # Use nbformat just for defaults
+                new_cell_pre_ymap["metadata"] = YMap(base_code_cell.metadata)
+                new_cell_pre_ymap["outputs"] = YArray() # Explicitly create YArray
+                new_cell_pre_ymap["execution_count"] = None
+            else: # markdown
+                base_md_cell = nbformat.v4.new_markdown_cell(source="")
+                new_cell_pre_ymap["metadata"] = YMap(base_md_cell.metadata)
+                # Ensure no outputs/execution_count for markdown
+                if "outputs" in new_cell_pre_ymap: del new_cell_pre_ymap["outputs"]
+                if "execution_count" in new_cell_pre_ymap: del new_cell_pre_ymap["execution_count"]
+
+            # 4. Convert the prepared dictionary to YMap and insert
+            logger.info(f"Splitting cell {cell_index}. Inserting new {original_cell_type} cell at index {new_cell_index}")
+            ycells.insert(new_cell_index, YMap(new_cell_pre_ymap))
 
         result_str = f"Cell {cell_index} split at line {line_number}. New cell created at index {new_cell_index}."
 
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.5) # Keep delay after modification
         await notebook.stop()
-        notebook = None
+        notebook = None # Mark as stopped
         return result_str
+
     except Exception as e:
         logger.error(f"Error in split_cell for index {cell_index} at line {line_number}: {e}", exc_info=True)
         result_str = f"Error splitting cell {cell_index}: {e}"
+        # Cleanup happens in finally
         return result_str
     finally:
+        # Ensure stop is attempted if client was created and might still be running
         if notebook and notebook._NbModelClient__run and not notebook._NbModelClient__run.done():
             try: await notebook.stop()
             except Exception as final_e: logger.error(f"Error stopping notebook in finally (split_cell): {final_e}")
@@ -1012,6 +1187,8 @@ async def get_all_cells() -> list[dict[str, Any]]:
 @mcp.tool()
 async def edit_cell_source(cell_index: int, new_content: str) -> str:
     """Edits the source content of a specific cell by its index."""
+    global logger, SERVER_URL, TOKEN, NOTEBOOK_PATH # Add needed globals
+
     logger.info(f"Executing edit_cell_source tool for cell index {cell_index}")
     notebook: NbModelClient | None = None
     result_str = f"[Error: Unknown issue in edit_cell_source for index {cell_index}]"
@@ -1027,38 +1204,111 @@ async def edit_cell_source(cell_index: int, new_content: str) -> str:
         if 0 <= cell_index < len(ycells):
             cell_data = ycells[cell_index] # This should be a YMap
             with ydoc.ydoc.transaction():
-                 source_obj = cell_data.get("source") # Get the source object
+                source_obj = cell_data.get("source") # Get the source object
                 if isinstance(source_obj, YText):
-                    # Correct way for pycrdt.Text: delete existing, insert new
+                    # --- Use Slice Deletion ---
                     existing_content = str(source_obj)
-                    if existing_content: # Check if there's actually text to delete
-                        source_obj.delete(0, len(existing_content))
-                    source_obj.insert(0, new_content) # Insert the new content at the beginning
-                 else:
-                     # If it's not YText (or doesn't exist), replace/create it
-                     cell_data["source"] = YText(new_content)
+                    if existing_content:
+                        del source_obj[0 : len(existing_content)] # Corrected delete
+                    source_obj.insert(0, new_content) # Keep insert
+                    # --- End Correction ---
+                else:
+                    # If it's not YText (or doesn't exist), replace/create it
+                    # Ensure YText is imported: from pycrdt import Text as YText
+                    cell_data["source"] = YText(new_content)
             logger.info(f"Updated source for cell index {cell_index}.")
             result_str = f"Source updated for cell at index {cell_index}."
         else:
             result_str = f"[Error: Cell index {cell_index} is out of bounds (0-{len(ycells)-1})]"
             logger.warning(result_str)
-            if notebook and notebook._NbModelClient__run and not notebook._NbModelClient__run.done():
-                 await notebook.stop()
-                 notebook = None
-            return result_str
+            # No need to stop client here if error is just validation before return
 
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.5) # Keep delay after modification
         await notebook.stop()
         notebook = None
         return result_str
     except Exception as e:
         logger.error(f"Error in edit_cell_source for index {cell_index}: {e}", exc_info=True)
         result_str = f"Error editing cell {cell_index}: {e}"
+        # Cleanup happens in finally
         return result_str
     finally:
+        # Ensure stop is attempted if client was created and might still be running
         if notebook and notebook._NbModelClient__run and not notebook._NbModelClient__run.done():
             try: await notebook.stop()
             except Exception as final_e: logger.error(f"Error stopping notebook in finally (edit_cell_source): {final_e}")
+
+@mcp.tool()
+async def get_kernel_variables(wait_seconds: int = 2) -> str:
+    """
+    Lists variables currently defined in the Jupyter kernel's interactive namespace
+    by executing the '%whos' magic command in a temporary cell.
+
+    NOTE: This provides a snapshot of the kernel's state at the time of execution.
+
+    Args:
+        wait_seconds: Seconds to wait after starting execution before getting output. Default 2.
+
+    Returns:
+        str: The output from the %whos command (a table of variables, types, and info),
+             or an error message if execution failed.
+    """
+    logger.info("Executing get_kernel_variables tool")
+    code_content = "%whos"  # IPython magic command to list variables
+    cell_output = "[Error: Failed to retrieve output for variable listing]" # Default error
+    cell_index: int | None = None
+
+    try:
+        # 1. Add cell
+        add_result = await add_code_cell(code_content)
+        cell_index = _parse_index_from_message(add_result) # Assumes _parse_index_from_message exists
+        if cell_index is None:
+            logger.error(f"Failed to add cell for variable listing. Result: {add_result}")
+            return f"[Error adding cell for variable listing: {add_result}]"
+        logger.info(f"Variable listing cell added at index {cell_index}.")
+
+        # 2. Execute cell
+        exec_result = await execute_cell(cell_index)
+        if "Error" in exec_result:
+            logger.error(f"Failed to start execution for variable listing cell {cell_index}. Result: {exec_result}")
+            # Try to delete the cell anyway before returning error
+            try:
+                logger.warning(f"Attempting cleanup delete for cell {cell_index} after execution error.")
+                await delete_cell(cell_index)
+            except Exception as del_err:
+                 logger.error(f"Cleanup delete failed for cell {cell_index}: {del_err}")
+            return f"[Error starting execution for variable listing: {exec_result}]"
+        logger.info(f"Execution started for variable listing cell {cell_index}. Waiting {wait_seconds}s...")
+
+        # 3. Wait
+        await asyncio.sleep(wait_seconds)
+        logger.info(f"Finished waiting for variable listing cell {cell_index}.")
+
+        # 4. Get Output (use wait_seconds=0 in get_cell_output as we already waited)
+        cell_output = await get_cell_output(cell_index, wait_seconds=0)
+        logger.info(f"Output received for variable listing cell {cell_index}.")
+
+        # 5. Delete Cell (cleanup - best effort in finally block)
+        # Deletion moved to finally block for robustness
+
+        # 6. Return kernel output
+        return cell_output
+
+    except Exception as e:
+        logger.error(f"Error during get_kernel_variables orchestration: {e}", exc_info=True)
+        # Error message returned, cleanup happens in finally
+        return f"[Error listing kernel variables: {e}]"
+
+    finally:
+        # Ensure cleanup happens even if errors occur after cell creation
+        if cell_index is not None:
+            try:
+                logger.info(f"Attempting cleanup delete for variable listing cell {cell_index} in finally block.")
+                delete_result = await delete_cell(cell_index)
+                logger.info(f"Deletion result for cell {cell_index} in finally: {delete_result}")
+            except Exception as final_del_e:
+                logger.error(f"Cleanup delete failed for cell {cell_index} in finally: {final_del_e}")
+
 
 @mcp.tool()
 async def get_all_outputs() -> dict[int, str]:
@@ -1270,11 +1520,81 @@ async def list_installed_packages(wait_seconds: int = 5) -> str:
         return f"[Error listing packages: {e}]"
                    
                  
-if __name__ == "__main__":
+# --- Main async function ---
+async def main():
+    global kernel, logger, mcp # Ensure access to mcp instance
+
     log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
-    logging.basicConfig(level=log_level, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
-    # Set lower levels for specific noisy libraries if desired
-    # logging.getLogger("websockets").setLevel(logging.WARNING)
-    # logging.getLogger("jupyter_server_ydoc").setLevel(logging.INFO) # Maybe useful
-    logger.info(f"Starting Jupyter MCP Server for notebook: {NOTEBOOK_PATH} on {SERVER_URL} [Log Level: {log_level}]")
-    mcp.run(transport="stdio")
+    logger.info(f"Starting Jupyter MCP Server main async function...")
+    logger.info(f"Target notebook: {NOTEBOOK_PATH} on {SERVER_URL} [Log Level: {log_level}]")
+
+    # Ensure kernel is started (assuming sync start before main)
+    if not kernel or not kernel.is_alive():
+         logger.error("Kernel object not initialized or not alive before starting server.")
+         if not kernel: return # Exit if no kernel object
+         # Optionally try to start kernel here if needed
+         try:
+             logger.info("Attempting kernel start within main...")
+             kernel.start()
+             if not kernel.is_alive():
+                 logger.error("Kernel failed to start within main.")
+                 return # Exit if kernel start fails
+             logger.info("Kernel started successfully within main.")
+         except Exception as start_err:
+             logger.error(f"Error starting kernel within main: {start_err}", exc_info=True)
+             return
+
+    # No monitor task needed now
+
+    try:
+        logger.info("Starting MCP server async stdio run...")
+        await mcp.run_stdio_async()
+        logger.info("MCP server async stdio run finished.")
+    # --- Add specific ExceptionGroup handling ---
+    except ExceptionGroup as eg:
+        logger.error(f"Caught ExceptionGroup in main run: {eg}", exc_info=False) # Log the group message
+        for i, exc in enumerate(eg.exceptions):
+             # Log each sub-exception WITH its traceback
+             logger.error(f"--- Sub-exception {i+1} ---", exc_info=exc)
+    # --- End Add ---
+    except Exception as e: # Keep general handler
+        logger.error(f"Caught general exception in main run: {e}", exc_info=True)
+    finally:
+        # --- Make SURE this uses kernel.stop(shutdown_kernel=False) ---
+        logger.info("Starting cleanup...")
+        if kernel and kernel.is_alive():
+             logger.info("Stopping kernel client connection (leaving kernel process running)...")
+             try:
+                 kernel.stop(shutdown_kernel=False) # Ensure this is the call being made
+                 logger.info("Kernel client connection stopped.")
+             except AttributeError as ae:
+                  logger.error(f"AttributeError during kernel stop: {ae}. Method missing?")
+             except Exception as stop_e:
+                  logger.error(f"Error stopping kernel client connection: {stop_e}", exc_info=True)
+        else:
+             logger.info("Kernel client already stopped or not started.")
+        logger.info("Cleanup finished.")
+
+# --- Entry point ---
+if __name__ == "__main__":
+    # Any purely synchronous setup can go here
+    # e.g., basic logging config that doesn't need the loop
+    logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"), format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
+
+    # Initialize kernel synchronously here if possible/needed
+    try:
+        logger.info(f"Initializing KernelClient for {SERVER_URL}...")
+        kernel = KernelClient(server_url=SERVER_URL, token=TOKEN)
+        kernel.start() # Start it synchronously
+        logger.info("KernelClient started synchronously.")
+    except Exception as e:
+        logger.error(f"Failed to initialize KernelClient at startup: {e}", exc_info=True)
+        kernel = None # Ensure kernel is None if start fails
+
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Server stopped by user (KeyboardInterrupt).")
+    except Exception as e:
+        # This catches errors during asyncio.run itself OR reflects the unhandled ones from main
+        logger.error(f"Unhandled exception at top level: {e}", exc_info=True)
