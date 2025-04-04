@@ -1,4 +1,4 @@
-# Jupyter MCP Server (Extended Fork)
+# Jupyter MCP Server Extended
 
 **Enhanced Jupyter Notebook interaction via the Model Context Protocol**
 
