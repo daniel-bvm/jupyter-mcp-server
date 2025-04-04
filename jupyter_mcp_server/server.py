@@ -305,7 +305,6 @@ def set_target_notebook(new_notebook_path: str) -> str:
     NOTEBOOK_PATH = new_notebook_path
     logger.info(f"Target notebook path changed to: '{NOTEBOOK_PATH}'")
     return f"Target notebook path set to '{NOTEBOOK_PATH}'. Subsequent tools will use this path."
-
 @mcp.tool()
 async def add_cell(content: str, cell_type: str, index: Optional[int] = None) -> str:
     """Adds a new cell with specified content and type to the notebook.
@@ -325,7 +324,7 @@ async def add_cell(content: str, cell_type: str, index: Optional[int] = None) ->
              final index (e.g., "Code cell added at index 5."), or an error
              message string starting with "[Error: ...]".
     """
-    
+
     global logger, SERVER_URL, TOKEN, NOTEBOOK_PATH # Add needed globals
 
     logger.info(f"Executing add_cell tool. Type: {cell_type}, Index: {index}")
@@ -360,14 +359,17 @@ async def add_cell(content: str, cell_type: str, index: Optional[int] = None) ->
         new_cell_pre_ymap["source"] = YText(content) # Create YText directly
 
         if cell_type == "code":
-            # Use nbformat defaults for metadata, execution_count if desired
-            base_cell = nbformat.v4.new_code_cell(source="") # Use nbformat for structure/defaults
-            new_cell_pre_ymap["metadata"] = base_cell.metadata
+            base_cell = nbformat.v4.new_code_cell(source="")
+            # --- FIX: Convert metadata dict to YMap ---
+            new_cell_pre_ymap["metadata"] = YMap(base_cell.metadata)
+            # --- END FIX ---
             new_cell_pre_ymap["outputs"] = YArray() # Explicitly create YArray
             new_cell_pre_ymap["execution_count"] = None
         else: # markdown
             base_cell = nbformat.v4.new_markdown_cell(source="")
-            new_cell_pre_ymap["metadata"] = base_cell.metadata
+            # --- FIX: Convert metadata dict to YMap ---
+            new_cell_pre_ymap["metadata"] = YMap(base_cell.metadata)
+            # --- END FIX ---
             # Markdown cells shouldn't have outputs/execution_count fields usually
 
         # --- End preparation ---
@@ -378,6 +380,7 @@ async def add_cell(content: str, cell_type: str, index: Optional[int] = None) ->
             ycells.insert(insert_index, ycell_map)
 
         logger.info(f"Successfully inserted {cell_type} cell at index {insert_index}.")
+        # Use the index where it was actually inserted
         result_str = f"{cell_type.capitalize()} cell added at index {insert_index}."
 
         await asyncio.sleep(0.5) # Use the longer delay
@@ -393,7 +396,6 @@ async def add_cell(content: str, cell_type: str, index: Optional[int] = None) ->
         if notebook and notebook._NbModelClient__run and not notebook._NbModelClient__run.done():
              try: await notebook.stop()
              except Exception as final_e: logger.error(f"Error stopping notebook in finally (add_cell): {final_e}")
-
 
 
 # More stable than add_cell
@@ -1140,7 +1142,7 @@ async def get_kernel_variables(wait_seconds: int = 2) -> str:
 
     try:
         # 1. Add cell
-        add_result = await add_code_cell(code_content)
+        add_result = await add_code_cell_on_bottom(code_content)
         cell_index = _parse_index_from_message(add_result) # Assumes _parse_index_from_message exists
         if cell_index is None:
             logger.error(f"Failed to add cell for variable listing. Result: {add_result}")
