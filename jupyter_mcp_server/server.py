@@ -752,124 +752,6 @@ async def delete_cell(cell_index: int) -> str:
 @mcp.tool()
 async def move_cell(from_index: int, to_index: int) -> str:
     """
-    Moves a cell from from_index to to_index by copying data, deleting original,
-    and inserting a new, correctly structured cell.
-    """
-    global logger, SERVER_URL, TOKEN, NOTEBOOK_PATH
-
-    logger.info(f"Executing move_cell tool from {from_index} to {to_index} (robust copy method)")
-    notebook: NbModelClient | None = None
-    result_str = f"[Error: Unknown issue in move_cell from {from_index} to {to_index}]"
-    try:
-        notebook = NbModelClient(
-            get_jupyter_notebook_websocket_url(server_url=SERVER_URL, token=TOKEN, path=NOTEBOOK_PATH)
-        )
-        await notebook.start()
-        await notebook.wait_until_synced()
-
-        ydoc = notebook._doc
-        ycells = ydoc._ycells # This is the pycrdt.Array
-        num_cells = len(ycells)
-
-        # --- Validation ---
-        if not (0 <= from_index < num_cells):
-            result_str = f"[Error: from_index {from_index} is out of bounds (0-{num_cells-1})]"
-        elif not (0 <= to_index <= num_cells): # Allow moving to the very end
-             result_str = f"[Error: to_index {to_index} is out of bounds (0-{num_cells})]"
-        elif from_index == to_index:
-             result_str = f"Cell is already at index {from_index}." # No move needed
-        else:
-            # --- Perform Copy / Delete / Create / Insert ---
-            logger.info(f"Attempting robust move: Copying {from_index}, Deleting {from_index}, Inserting new at {to_index}")
-            try:
-                # Perform operations within a single transaction
-                with ydoc.ydoc.transaction():
-                    # 1. Copy data from source cell, converting Yjs types to Python types
-                    source_cell_y = ycells[from_index]
-                    # Safely get data, providing defaults for missing keys
-                    copied_data = {
-                        "cell_type": source_cell_y.get("cell_type", "code"), # Default to code if missing? Or error?
-                        "source": str(source_cell_y.get("source", "")),
-                        "metadata": dict(source_cell_y.get("metadata", YMap())),
-                    }
-                    cell_type = copied_data["cell_type"]
-                    if cell_type == "code":
-                        copied_data["outputs"] = list(source_cell_y.get("outputs", YArray()))
-                        copied_data["execution_count"] = source_cell_y.get("execution_count") # Can be None
-
-                    # 2. Delete the original cell (use pop for potential direct object reuse if needed later, but del is fine)
-                    del ycells[from_index]
-                    # item_to_move_data = ycells.pop(from_index) # Alternative to del
-
-                    # 3. Prepare the dictionary for the NEW YMap, converting back to Yjs types
-                    new_cell_pre_ymap: Dict[str, Any] = {}
-                    new_cell_pre_ymap["cell_type"] = cell_type
-                    new_cell_pre_ymap["source"] = YText(copied_data["source"])
-                    new_cell_pre_ymap["metadata"] = YMap(copied_data.get("metadata", {}))
-
-                    if cell_type == "code":
-                         # Convert Python list of outputs back to YArray
-                         new_cell_pre_ymap["outputs"] = YArray(copied_data.get("outputs", []))
-                         # Add execution_count only if it was present and not None in the copy
-                         exec_count = copied_data.get("execution_count")
-                         if exec_count is not None:
-                              new_cell_pre_ymap["execution_count"] = exec_count
-                    # else: # Markdown - Ensure outputs/count are not present if strict schema needed
-                    #    if "outputs" in new_cell_pre_ymap: del new_cell_pre_ymap["outputs"]
-                    #    if "execution_count" in new_cell_pre_ymap: del new_cell_pre_ymap["execution_count"]
-
-
-                    # 4. Insert the NEW cell YMap at the target index
-                    # Adjust insertion index if moving item to later position
-                    # Example: move 0 -> 2 in [a,b,c]. del ycells[0] -> [b,c]. insert at 2 -> [b,c,a]. Correct.
-                    # Example: move 2 -> 0 in [a,b,c]. del ycells[2] -> [a,b]. insert at 0 -> [c,a,b]. Correct.
-                    # It seems direct insertion at to_index works correctly after deletion.
-                    ycells.insert(to_index, YMap(new_cell_pre_ymap))
-
-                logger.info(f"Robust move successful: Cell from {from_index} inserted at {to_index}.")
-                result_str = f"Cell moved from index {from_index} to {to_index}."
-            except KeyError as ke:
-                 # Catch errors if expected keys are missing during copy (e.g., missing cell_type?)
-                 logger.error(f"Missing key during cell copy/move from {from_index}: {ke}", exc_info=True)
-                 result_str = f"[Error: Cell structure invalid during move - missing key {ke}]"
-            except Exception as move_e:
-                 # Catch other errors specifically during the move transaction
-                 logger.error(f"Error during robust move transaction from {from_index} to {to_index}: {move_e}", exc_info=True)
-                 result_str = f"[Error during move operation: {move_e}]"
-            # --- End Copy / Delete / Create / Insert ---
-
-        # Handle validation or transaction errors before stopping client
-        # Check result_str which might have been updated by exception handling
-        if "Error" in result_str or "already at index" in result_str:
-             logger.warning(f"Move cell result: {result_str}")
-             if notebook and notebook._NbModelClient__run and not notebook._NbModelClient__run.done():
-                   try: await notebook.stop()
-                   except Exception: pass
-                   notebook = None
-             return result_str
-
-        # Success case
-        await asyncio.sleep(0.5) # Keep delay after modification
-        await notebook.stop()
-        notebook = None
-        return result_str
-
-    except Exception as e:
-        # Catch errors during setup/connection
-        logger.error(f"Error in move_cell setup from {from_index} to {to_index}: {e}", exc_info=True)
-        result_str = f"Error moving cell from {from_index} to {to_index}: {e}"
-        # Cleanup happens in finally
-        return result_str
-    finally:
-        # Ensure stop is attempted if client was created and might still be running
-        if notebook and notebook._NbModelClient__run and not notebook._NbModelClient__run.done():
-            try: await notebook.stop()
-            except Exception as final_e: logger.error(f"Error stopping notebook in finally (move_cell): {final_e}")
-
-            
-@mcp.tool()
-async def move_cell(from_index: int, to_index: int) -> str:
-    """
     Moves a cell from from_index to to_index by deleting the original reference
     and re-inserting it at the target index within a transaction.
     """
@@ -898,7 +780,6 @@ async def move_cell(from_index: int, to_index: int) -> str:
         elif from_index == to_index:
              result_str = f"Cell is already at index {from_index}." # No move needed
         else:
-            # --- Perform simple Delete / Insert of same reference ---
             logger.info(f"Attempting simple move: Deleting {from_index}, Inserting reference at {to_index}")
             try:
                 # Perform operations within a single transaction
@@ -919,7 +800,6 @@ async def move_cell(from_index: int, to_index: int) -> str:
                  # Catch errors specifically during the move transaction
                  logger.error(f"Error during simple move transaction from {from_index} to {to_index}: {move_e}", exc_info=True)
                  result_str = f"[Error during move operation: {move_e}]"
-            # --- End Delete / Insert block ---
 
         # Handle validation or transaction errors before stopping client
         if "Error" in result_str or "already at index" in result_str:
