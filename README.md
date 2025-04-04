@@ -3,6 +3,7 @@
 **Enhanced Jupyter Notebook interaction via the Model Context Protocol**
 
 [![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
+[![smithery badge](https://smithery.ai/badge/@itisaevalex/jupyter-mcp-server-extended)](https://smithery.ai/server/@itisaevalex/jupyter-mcp-server-extended)
 
 This project provides a [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server that enables rich, interactive communication between AI models (like Claude) or other MCP clients and live Jupyter notebooks running in JupyterLab.
 
