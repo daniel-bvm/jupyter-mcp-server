@@ -1285,7 +1285,7 @@ async def install_package(package_name: str, timeout_seconds: int = 60) -> str:
 
     try:
         # 1. Add cell
-        add_result = await add_code_cell(code_content)
+        add_result = await add_code_cell_on_bottom(code_content)
         cell_index = _parse_index_from_message(add_result)
         if cell_index is None:
             logger.error(f"Failed to add cell for package install. Result: {add_result}")
@@ -1356,7 +1356,7 @@ async def list_installed_packages(wait_seconds: int = 5) -> str:
 
     try:
         # 1. Add cell
-        add_result = await add_code_cell(code_content)
+        add_result = await add_code_cell_on_bottom(code_content)
         cell_index = _parse_index_from_message(add_result)
         if cell_index is None:
             logger.error(f"Failed to add cell for package list. Result: {add_result}")
