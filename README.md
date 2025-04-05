@@ -1,4 +1,4 @@
-# Mercury MCP: Your AI's messenger to Jupyter
+# Jupyter MCP Extended
 
 **Enhanced Jupyter Notebook interaction via the Model Context Protocol**
 
