@@ -1,0 +1,9 @@
+{
+    "command": "python",
+    "args": ["-m", "jupyter_mcp_server.server"],
+    "env": {
+        "NOTEBOOK_PATH": "notebook.ipynb",
+        "SERVER_URL": "http://localhost:8888",
+        "TOKEN": "AUTH_TOKEN"
+    }
+}

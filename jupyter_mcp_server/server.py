@@ -18,16 +18,16 @@ mcp = FastMCP("jupyter")
 NOTEBOOK_PATH = os.getenv("NOTEBOOK_PATH", "notebook.ipynb")
 
 SERVER_URL = os.getenv("SERVER_URL", "http://localhost:8888")
+SERVER_URL = SERVER_URL.replace("localhost", "localmodel")
+SERVER_URL = SERVER_URL.replace("127.0.0.1", "localmodel")
+SERVER_URL = SERVER_URL.replace("0.0.0.0", "localmodel")
 
-TOKEN = os.getenv("TOKEN", "MY_TOKEN")
-
+TOKEN = os.getenv("TOKEN", "")
 
 logger = logging.getLogger(__name__)
 
-
 kernel = KernelClient(server_url=SERVER_URL, token=TOKEN)
 kernel.start()
-
 
 def extract_output(output: dict) -> str:
     """
