@@ -5,8 +5,8 @@ copy pyproject.toml pyproject.toml
 copy config.json config.json
 
 env NOTEBOOK_PATH="notebook.ipynb"
-env NOTEBOOK_PORT="8888"
-env HTTP_DISPLAY_URL="http://agent-router/84532-jupyterlab-ai/$NOTEBOOK_PORT/lab/tree/$NOTEBOOK_PATH"
+env NOTEBOOK_PORT="34587"
+env HTTP_DISPLAY_URL="http://localhost:$NOTEBOOK_PORT/lab/tree/$NOTEBOOK_PATH"
 
 run pip install .
 
