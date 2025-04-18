@@ -4,6 +4,8 @@
 
 import logging
 import os
+import subprocess
+import time
 
 from jupyter_kernel_client import KernelClient
 from jupyter_nbmodel_client import (
@@ -11,23 +13,21 @@ from jupyter_nbmodel_client import (
     get_jupyter_notebook_websocket_url,
 )
 from mcp.server.fastmcp import FastMCP
+import asyncio
+import sys
+import json
+from typing import Any
 
 mcp = FastMCP("jupyter")
 
-
 NOTEBOOK_PATH = os.getenv("NOTEBOOK_PATH", "notebook.ipynb")
-
-SERVER_URL = os.getenv("SERVER_URL", "http://localhost:8888")
-SERVER_URL = SERVER_URL.replace("localhost", "localmodel")
-SERVER_URL = SERVER_URL.replace("127.0.0.1", "localmodel")
-SERVER_URL = SERVER_URL.replace("0.0.0.0", "localmodel")
-
-TOKEN = os.getenv("TOKEN", "")
+NOTEBOOK_PORT = os.getenv("NOTEBOOK_PORT", 8888)
+SERVER_URL = os.getenv("SERVER_URL", f"http://0.0.0.0:{NOTEBOOK_PORT}")
+TOKEN = ""
 
 logger = logging.getLogger(__name__)
 
 kernel = KernelClient(server_url=SERVER_URL, token=TOKEN)
-kernel.start()
 
 def extract_output(output: dict) -> str:
     """
@@ -56,7 +56,6 @@ def extract_output(output: dict) -> str:
         return output["traceback"]
     else:
         return f"[Unknown output type: {output_type}]"
-
 
 @mcp.tool()
 async def add_markdown_cell(cell_content: str) -> str:
@@ -103,5 +102,82 @@ async def add_execute_code_cell(cell_content: str) -> list[str]:
     return str_outputs
 
 
+@mcp.tool()
+async def clear_notebook() -> str:
+    notebook = NbModelClient(
+        get_jupyter_notebook_websocket_url(server_url=SERVER_URL, token=TOKEN, path=NOTEBOOK_PATH)
+    )
+    await notebook.start()
+    notebook.clear()
+    await notebook.stop()
+    return "Jupyter notebook cleared."
+
+
+async def create_empty_notebook_file(path: str):
+    version_str = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+
+    empty_content = {
+        "cells": [],
+        "metadata": {
+            "kernelspec": {
+                "display_name": "Python 3 (ipykernel)",
+                "language": "python",
+                "name": "python3"
+            },
+            "language_info": {
+            "codemirror_mode": {
+                "name": "ipython",
+                "version": 3
+            },
+            "file_extension": ".py",
+            "mimetype": "text/x-python",
+            "name": "python",
+            "nbconvert_exporter": "python",
+            "pygments_lexer": "ipython3",
+            "version": version_str
+            }
+        },
+        "nbformat": 4,
+        "nbformat_minor": 5
+    }
+
+    with open(path, "w") as f:
+        f.write(json.dumps(empty_content))
+
+def main():
+    process = None
+
+    try:
+        root_dir = os.path.join(os.getcwd(), "notebooks")
+        os.makedirs(root_dir, exist_ok=True)
+        asyncio.run(create_empty_notebook_file(os.path.join(root_dir, NOTEBOOK_PATH)))
+
+        process = subprocess.Popen(
+            [
+                "jupyter", "lab", 
+                "--port", str(NOTEBOOK_PORT), 
+                "--ip", "0.0.0.0", 
+                "--ServerApp.root_dir", root_dir, 
+                "--allow_remote_access", "true",
+                "--NotebookApp.disable_check_xsrf", "true",
+                "--NotebookApp.token", "",
+                "--NotebookApp.password", "",
+                "--allow-root"
+            ],
+            stderr=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            env=os.environ
+        )
+
+        # wait for the server to start
+        time.sleep(5)
+
+        kernel.start()
+        mcp.run(transport="stdio")
+    finally:
+        kernel.stop()
+        if process:
+            process.kill()
+
 if __name__ == "__main__":
-    mcp.run(transport="stdio")
+    main()
