@@ -39,16 +39,16 @@ async def create_empty_notebook_file(path: str):
                 "name": "python3"
             },
             "language_info": {
-            "codemirror_mode": {
-                "name": "ipython",
-                "version": 3
-            },
-            "file_extension": ".py",
-            "mimetype": "text/x-python",
-            "name": "python",
-            "nbconvert_exporter": "python",
-            "pygments_lexer": "ipython3",
-            "version": version_str
+                "codemirror_mode": {
+                    "name": "ipython",
+                    "version": 3
+                },
+                "file_extension": ".py",
+                "mimetype": "text/x-python",
+                "name": "python",
+                "nbconvert_exporter": "python",
+                "pygments_lexer": "ipython3",
+                "version": version_str
             }
         },
         "nbformat": 4,
@@ -60,23 +60,26 @@ async def create_empty_notebook_file(path: str):
 
 root_dir = os.path.join(os.getcwd(), "notebooks")
 os.makedirs(root_dir, exist_ok=True)
-asyncio.run(create_empty_notebook_file(os.path.join(root_dir, NOTEBOOK_PATH)))
+asyncio.run(create_empty_notebook_file(os.path.join(os.getcwd(), NOTEBOOK_PATH)))
 
 process = subprocess.Popen(
     [
         "jupyter", "lab", 
         "--port", str(NOTEBOOK_PORT), 
         "--ip", "0.0.0.0", 
-        "--ServerApp.root_dir", root_dir, 
+        # "--notebook-dir", root_dir, 
         "--allow_remote_access", "true",
-        "--NotebookApp.disable_check_xsrf", "true",
-        "--NotebookApp.token", "",
-        "--NotebookApp.password", "",
-        "--allow-root", "--no-browser"
+        "--ServerApp.disable_check_xsrf", "true",
+        "--ServerApp.token", "",
+        "--ServerApp.password", "",
+        "--ServerApp.allow_origin", "*",
+        "--ServerApp.allow_root", "true",
+        "--ServerApp.open_browser", "false"
     ],
     stderr=subprocess.DEVNULL,
     stdout=subprocess.DEVNULL,
-    env=os.environ
+    env=os.environ,
+    # shell=True
 )
 
 # wait for the server to start
