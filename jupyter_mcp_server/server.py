@@ -133,6 +133,8 @@ async def notebook_connection(tool_name: str, modify: bool = False) -> AsyncGene
         yield notebook # Provide the connected client to the 'with' block
     except Exception as e:
         logger.error(f"[{tool_name}] Error during notebook connection/sync: {e}", exc_info=True)
+        import traceback
+        traceback.print_exc()
         raise ConnectionError(f"Failed to connect/sync notebook for {tool_name}: {e}") from e
     finally:
         if notebook:
@@ -1082,7 +1084,6 @@ if __name__ == "__main__":
         stderr=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         env=os.environ,
-        # shell=True
     )
 
     if not wait_for_server_ready('localhost', NOTEBOOK_PORT, STARTUP_TIMEOUT_SECONDS):

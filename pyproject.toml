@@ -24,9 +24,9 @@ dependencies = [
     "jupyter-nbmodel-client>=0.11.1",
     "mcp[cli]>=1.2.1",
     "jupyterlab", 
-    "jupyter-collaboration", 
     "ipykernel",
-    "jupyter_server_ydoc"
+    "jupyter_server_ydoc",
+    "pillow"
 ]
 
 [project.optional-dependencies]
