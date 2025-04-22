@@ -1,5 +1,5 @@
 # Copyright (c) 2023-2024 Datalayer, Inc.
-#
+# Copyright (c) 2025 Alexander Isaev
 # BSD 3-Clause License
 
 SHELL=/bin/bash
@@ -8,7 +8,7 @@ SHELL=/bin/bash
 
 .PHONY: clean build
 
-VERSION = "0.0.6"
+VERSION = "0.5"
 
 default: all ## Default target is all.
 
