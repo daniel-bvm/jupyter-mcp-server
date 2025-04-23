@@ -734,6 +734,24 @@ async def move_cell(from_index: int, to_index: int) -> str:
         return f"[Error moving cell from {from_index} to {to_index}: {e}]"
 
 
+@mcp.tool()
+async def clear_notebook() -> str:
+    """Clears all cells from the notebook."""
+    tool_name = "clear_notebook"
+    logger.info(f"Executing {tool_name} tool.")
+
+    try:
+        async with notebook_connection(tool_name, modify=True) as notebook:
+            ydoc = notebook._doc
+            ycells = ydoc._ycells
+            ycells.clear()
+            logger.info(f"[{tool_name}] Successfully cleared all cells.")
+            return "All cells cleared."
+    except Exception as e:
+        logger.error(f"[{tool_name}] Tool execution failed: {e}", exc_info=True)
+        return f"[Error clearing notebook: {e}]"
+
+
 # @mcp.tool()
 async def search_notebook_cells(search_string: str, case_sensitive: bool = False) -> List[Dict[str, Any]]:
     """

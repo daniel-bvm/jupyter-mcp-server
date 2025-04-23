@@ -19,4 +19,5 @@ RUN sed -i '/"owner": self._username,/a \                "name": self._username,
 # run python -m pip uninstall -y pycrdt datalayer_pycrdt jupyter-ydoc \
     # && python -m pip install datalayer_pycrdt jupyter-ydoc==v3.0.3
 
+expose 34587
 run pip install --force-reinstall --no-cache-dir pycrdt
