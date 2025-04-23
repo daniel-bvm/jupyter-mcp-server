@@ -193,7 +193,7 @@ This server provides the following tools for interacting with Jupyter:
   * Changes the target notebook file path for subsequent tool calls (session only). Path must be relative.
 * **add_cell(content: str, cell_type: str, index: Optional[int] = None)** → str
   * Adds a new cell ('code' or 'markdown') with specified content at index (appends if index is None or invalid). Uses robust Yjs type creation.
-* **add_code_cell_on_bottom(cell_content: str)** → str
+* **add_code_cell_at_bottom(cell_content: str)** → str
   * Adds a code cell at the end of the notebook.
 * **execute_cell(cell_index: int)** → str
   * Sends execution request for a cell (fire-and-forget via asyncio.to_thread). Does not wait for completion. Returns confirmation message or error.

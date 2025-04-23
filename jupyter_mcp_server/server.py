@@ -188,8 +188,8 @@ async def _run_temporary_code(code_content: str, wait_seconds: float, tool_name:
     cell_index: Optional[int] = None
     logger.info(f"[{tool_name}] Running temporary code cell...")
     try:
-        # Use add_code_cell_on_bottom for reliability as previously established
-        add_result = await add_code_cell_on_bottom(code_content)
+        # Use add_code_cell_at_bottom for reliability as previously established
+        add_result = await add_code_cell_at_bottom(code_content)
         cell_index = _parse_index_from_message(add_result)
         if cell_index is None:
             raise RuntimeError(f"Failed to add temporary cell. Add result: {add_result}")
@@ -418,13 +418,14 @@ async def insert_cell(content: str, cell_type: str, index: Optional[int] = None)
     """
     Adds a cell ('code' or 'markdown') with content at specified index (or appends).
     Uses robust Yjs type creation including YMap for metadata.
+    Executes the cell after adding and gets the result.
 
     Args:
         content: Source content for the new cell.
         cell_type: Must be 'code' or 'markdown'.
         index: 0-based index to insert at; appends if None or invalid.
     """
-    tool_name = "add_cell"
+    tool_name = "insert_cell"
     logger.info(f"Executing {tool_name}. Type: {cell_type}, Index: {index}")
 
     if cell_type not in ["code", "markdown"]:
@@ -461,7 +462,10 @@ async def insert_cell(content: str, cell_type: str, index: Optional[int] = None)
                 ycells.insert(insert_index, ycell_map)
 
             logger.info(f"[{tool_name}] Successfully inserted {cell_type} cell at index {insert_index}.")
-            return f"{cell_type.capitalize()} cell added at index {insert_index}."
+            
+
+        res = await execute_cell(insert_index)
+        return f"{cell_type.capitalize()} cell added at index {insert_index} and executed. Result: {res}"
 
     except Exception as e:
         logger.error(f"[{tool_name}] Tool execution failed: {e}", exc_info=True)
@@ -469,16 +473,17 @@ async def insert_cell(content: str, cell_type: str, index: Optional[int] = None)
 
 
 @mcp.tool()
-async def add_code_cell_on_bottom(cell_content: str) -> str:
+async def add_code_cell_at_bottom(cell_content: str) -> str:
     """
     Append new code cell at the end of the notebook.
+    Executes the cell after adding and gets the result.
 
     Args:
         cell_content: Code content for the new cell.
     """
     # This now uses the library directly, which was deemed more stable previously
     # If add_cell with manual YMap creation is stable, this could be removed.
-    tool_name = "add_code_cell_on_bottom"
+    tool_name = "add_code_cell_at_bottom"
     logger.info(f"Executing {tool_name}.")
     try:
         # Use context manager even though we call library method
@@ -487,10 +492,13 @@ async def add_code_cell_on_bottom(cell_content: str) -> str:
              # Use the library's potentially more reliable method
              cell_index = notebook.add_code_cell(cell_content)
              logger.info(f"[{tool_name}] Added code cell at index {cell_index} using library method.")
-             return f"Code cell added at index {cell_index}."
+
+        res = await execute_cell(cell_index)
+        return f"Code cell added at index {cell_index} and executed. Result: {res}"
+
     except Exception as e:
         logger.error(f"[{tool_name}] Tool execution failed: {e}", exc_info=True)
-        return f"[Error adding code cell on bottom: {e}]"
+        return f"[Error adding code cell at bottom: {e}]"
 
 
 @mcp.tool()
