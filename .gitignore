@@ -124,3 +124,8 @@ untracked_notebooks/*
 docs/.yarn/*
 
 uv.lock
+
+scripts/docker.sh
+
+.tmp/
+old_system_prompt.txt
