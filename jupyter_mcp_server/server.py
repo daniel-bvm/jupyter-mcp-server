@@ -318,8 +318,9 @@ async def get_file_content(file_path: str) -> str:
     logger.info(f"Executing {tool_name} tool for path: {file_path}")
     max_image_dim: int = 768
 
-    if ".." in file_path or os.path.isabs(file_path):
-        return "[Error: Invalid file path. Must be relative and not use '..' to escape the root directory.]"
+    # if ".." in file_path or os.path.isabs(file_path):
+    #     return "[Error: Invalid file path. Must be relative and not use '..' to escape the root directory.]"
+    file_path = file_path.replace("/workspace", "")
 
     try:
         response = await _jupyter_api_request("GET", file_path)
@@ -336,15 +337,15 @@ async def get_file_content(file_path: str) -> str:
         mimetype = file_data.get("mimetype", "")
         filename = file_data.get("name", os.path.basename(file_path))
 
-        if content is None: 
+        if content is None:
             return f"[Error: No content found for '{file_path}']"
 
         if content_format == "text":
             return content
-        
+
         if content_format == "base64":
             logger.debug(f"[{tool_name}] Processing base64 content (MIME: {mimetype}).")
-        
+
             if mimetype and mimetype.startswith("image/") and Image:
                 try:
                     decoded_bytes = base64.b64decode(content)
@@ -360,10 +361,10 @@ async def get_file_content(file_path: str) -> str:
                         save_format = 'PNG' if img.format != 'JPEG' else 'JPEG'
                         img.save(resized_buffer, format=save_format)
                         content = base64.b64encode(resized_buffer.getvalue()).decode('ascii')
-                        
-                        if save_format == 'PNG': 
+
+                        if save_format == 'PNG':
                             mimetype = 'image/png'
-                        
+
                         resized = True
 
                     data_uri = f"data:{mimetype};base64,{content}"
@@ -462,7 +463,7 @@ async def insert_cell(content: str, cell_type: str, index: Optional[int] = None)
                 ycells.insert(insert_index, ycell_map)
 
             logger.info(f"[{tool_name}] Successfully inserted {cell_type} cell at index {insert_index}.")
-            
+
 
         res = await execute_cell(insert_index)
         return f"{cell_type.capitalize()} cell added at index {insert_index} and executed. Result: {res}"
@@ -1068,10 +1069,10 @@ async def main():
         logger.info("Cleanup finished.")
 
 def wait_for_server_ready(host: str, port: int, timeout_seconds=5):
-    
+
     import socket
     timeout = time.time() + timeout_seconds
-    
+
     while time.time() < timeout:
         try:
             socket.create_connection((host, port), timeout=1)
@@ -1080,25 +1081,25 @@ def wait_for_server_ready(host: str, port: int, timeout_seconds=5):
             time.sleep(0.1)
 
     return False
-        
-    
+
+
 
 
 # --- Entry point ---
 if __name__ == "__main__":
     # Perform synchronous setup here, like kernel initialization
-    
-        
+
+
     root_dir = os.path.join(os.getcwd(), "notebooks")
     os.makedirs(root_dir, exist_ok=True)
     create_empty_notebook_file(os.path.join(os.getcwd(), NOTEBOOK_PATH))
 
     process = subprocess.Popen(
         [
-            "jupyter", "lab", 
-            "--port", str(NOTEBOOK_PORT), 
-            "--ip", "0.0.0.0", 
-            # "--notebook-dir", root_dir, 
+            "jupyter", "lab",
+            "--port", str(NOTEBOOK_PORT),
+            "--ip", "0.0.0.0",
+            # "--notebook-dir", root_dir,
             "--allow_remote_access", "true",
             "--ServerApp.disable_check_xsrf", "true",
             "--ServerApp.token", "",

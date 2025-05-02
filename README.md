@@ -1,4 +1,4 @@
-# Jupyter MCP Extended
+# Vibe Data Science
 
 **Enhanced Jupyter Notebook interaction via the Model Context Protocol**
 
@@ -11,14 +11,13 @@ This project provides a [Model Context Protocol (MCP)](https://modelcontextproto
 
 ## Features
 
-* Connects MCP clients (e.g., Claude Desktop) to a running JupyterLab instance.
-* Provides a wide array of tools for notebook interaction, including:
-    * **Cell Management:** Add, delete, move, split, edit source.
-    * **Execution:** Execute specific cells or all cells, retrieve output.
-    * **File System:** List directory contents, get file content (with image resizing).
-    * **Kernel Introspection:** List kernel variables, list installed packages.
-    * **Package Management:** Install packages into the kernel environment.
-    * **Notebook State:** Search cells, get all cell info/outputs, set target notebook path.
+Provides a wide array of tools for notebook interaction, including:
+  * **Cell Management:** Add, delete, move, split, edit source.
+  * **Execution:** Execute specific cells or all cells, retrieve output.
+  * **File System:** List directory contents, get file content (with image resizing).
+  * **Kernel Introspection:** List kernel variables, list installed packages.
+  * **Package Management:** Install packages into the kernel environment.
+  * **Notebook State:** Search cells, get all cell info/outputs, set target notebook path.
 
 ## Requirements
 
@@ -133,18 +132,18 @@ The MCP server (running in Docker) reads its configuration from environment vari
       "command": "docker",
       "args": [
         "run",
-        "-i", 
-        "--rm", 
-        "-e", "SERVER_URL", 
+        "-i",
+        "--rm",
+        "-e", "SERVER_URL",
         "-e", "TOKEN",
         "-e", "NOTEBOOK_PATH",
-        "-e", "LOG_LEVEL=INFO", 
-        "jupyter-mcp-server:latest" 
+        "-e", "LOG_LEVEL=INFO",
+        "jupyter-mcp-server:latest"
       ],
       "env": {
-        "SERVER_URL": "http://host.docker.internal:8888", 
-        "TOKEN": "YOUR_SECURE_TOKEN", 
-        "NOTEBOOK_PATH": "notebook.ipynb" 
+        "SERVER_URL": "http://host.docker.internal:8888",
+        "TOKEN": "YOUR_SECURE_TOKEN",
+        "NOTEBOOK_PATH": "notebook.ipynb"
       }
     }
   }
@@ -162,7 +161,7 @@ The MCP server (running in Docker) reads its configuration from environment vari
         "run",
         "-i",
         "--rm",
-        "--network=host", 
+        "--network=host",
         "-e", "SERVER_URL",
         "-e", "TOKEN",
         "-e", "NOTEBOOK_PATH",
@@ -170,9 +169,9 @@ The MCP server (running in Docker) reads its configuration from environment vari
         "jupyter-mcp-server:latest"
       ],
       "env": {
-        "SERVER_URL": "http://localhost:8888", 
-        "TOKEN": "YOUR_SECURE_TOKEN", 
-        "NOTEBOOK_PATH": "notebook.ipynb" 
+        "SERVER_URL": "http://localhost:8888",
+        "TOKEN": "YOUR_SECURE_TOKEN",
+        "NOTEBOOK_PATH": "notebook.ipynb"
       }
     }
   }
