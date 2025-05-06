@@ -4,6 +4,8 @@ copy jupyter_mcp_server jupyter_mcp_server
 copy pyproject.toml pyproject.toml
 copy config.json config.json
 
+copy system_prompt.txt system_prompt.txt
+
 env NOTEBOOK_PATH="notebook.ipynb"
 env NOTEBOOK_PORT="34587"
 env HTTP_DISPLAY_URL="http://localhost:$NOTEBOOK_PORT/lab/tree/$NOTEBOOK_PATH"
@@ -17,7 +19,7 @@ RUN sed -i '/"owner": self._username,/a \                "name": self._username,
     || echo "WARNING: Failed to patch jupyter_nbmodel_client/client.py"
 
 # run python -m pip uninstall -y pycrdt datalayer_pycrdt jupyter-ydoc \
-    # && python -m pip install datalayer_pycrdt jupyter-ydoc==v3.0.3
+# && python -m pip install datalayer_pycrdt jupyter-ydoc==v3.0.3
 
 expose 34587
 run pip install --force-reinstall --no-cache-dir pycrdt
