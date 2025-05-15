@@ -300,7 +300,7 @@ async def list_notebook_directory() -> str:
         return f"[Unexpected Error in {tool_name}: {e}]"
 
 
-@mcp.tool()
+# @mcp.tool()
 async def get_file_content(file_path: str) -> str:
     """
     Retrieves file content. Text is returned directly. Images are resized
@@ -540,7 +540,7 @@ async def execute_cell(cell_index: int) -> str:
             if not (0 <= cell_index < num_cells):
                 return f"[Error: Cell index {cell_index} out of bounds (0-{num_cells-1})]"
             if ycells[cell_index].get("cell_type") != "code":
-                 return f"[Error: Cell index {cell_index} is not a code cell]"
+                return f"[Error: Cell index {cell_index} is not a code cell]"
 
             # --- Dispatch execution to thread ---
             try:
@@ -548,7 +548,8 @@ async def execute_cell(cell_index: int) -> str:
                 # Assuming notebook.execute_cell is synchronous or handles its own async internally
                 await asyncio.to_thread(notebook.execute_cell, cell_index, kernel)
                 logger.info(f"[{tool_name}] Execution request dispatched for cell {cell_index}.")
-                return f"Execution request sent for cell at index {cell_index}."
+                output = await get_cell_output(cell_index)
+                return f"Execution request sent for cell at index {cell_index}. Output: {output}"
             except Exception as exec_dispatch_err:
                 logger.error(f"[{tool_name}] Error dispatching execution request: {exec_dispatch_err}", exc_info=True)
                 return f"[Error dispatching execution for cell {cell_index}: {exec_dispatch_err}]"
@@ -622,7 +623,7 @@ async def execute_all_cells() -> str:
         return f"[Error in {tool_name}: {e}]"
 
 
-@mcp.tool()
+# @mcp.tool()
 async def get_cell_output(cell_index: int, wait_seconds: float = OUTPUT_WAIT_DELAY) -> str:
     """
     Retrieves output of a code cell by index. Waits briefly if requested.
@@ -646,7 +647,7 @@ async def get_cell_output(cell_index: int, wait_seconds: float = OUTPUT_WAIT_DEL
             num_cells = len(ycells)
 
             if not (0 <= cell_index < num_cells):
-                 return f"[Error: Cell index {cell_index} out of bounds (0-{num_cells-1})]"
+                return f"[Error: Cell index {cell_index} out of bounds (0-{num_cells-1})]"
 
             cell_data = ycells[cell_index]
             outputs = cell_data.get("outputs", [])
@@ -1017,7 +1018,7 @@ async def install_package(package_name: str, timeout_seconds: int = 60) -> str:
     return await _run_temporary_code(code_content, timeout_seconds, tool_name)
 
 
-@mcp.tool()
+# @mcp.tool()
 async def list_installed_packages(wait_seconds: int = 5) -> str:
     """
     Lists installed packages in the kernel using '!pip list' via a temporary cell.
