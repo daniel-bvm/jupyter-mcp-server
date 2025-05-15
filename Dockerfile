@@ -9,6 +9,7 @@ copy system_prompt.txt system_prompt.txt
 env NOTEBOOK_PATH="notebook.ipynb"
 env NOTEBOOK_PORT="34587"
 env HTTP_DISPLAY_URL="http://localhost:$NOTEBOOK_PORT/lab/tree/$NOTEBOOK_PATH"
+ENV PIP_ROOT_USER_ACTION=ignore
 
 run pip install .
 run python -m pip install jupyterlab ipykernel \
