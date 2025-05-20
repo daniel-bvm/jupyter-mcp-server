@@ -414,7 +414,7 @@ def set_target_notebook(new_notebook_path: str) -> str:
     return f"Target notebook path set to '{NOTEBOOK_PATH}'."
 
 
-@mcp.tool()
+# @mcp.tool()
 async def insert_cell(content: str, cell_type: str, index: Optional[int] = None) -> str:
     """
     Adds a cell ('code' or 'markdown') with content at specified index (or appends).
