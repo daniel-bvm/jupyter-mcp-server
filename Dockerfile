@@ -1,4 +1,4 @@
-from nikolasigmoid/py-mcp-proxy:latest
+from localhost/py-mcp-proxy:latest
 
 copy jupyter_mcp_server jupyter_mcp_server
 copy pyproject.toml pyproject.toml
@@ -10,6 +10,8 @@ env NOTEBOOK_PATH="notebook.ipynb"
 env NOTEBOOK_PORT="34587"
 env HTTP_DISPLAY_URL="http://localhost:$NOTEBOOK_PORT/lab/tree/$NOTEBOOK_PATH"
 ENV PIP_ROOT_USER_ACTION=ignore
+
+RUN apt-get update && apt-get install -y libpq-dev gcc
 
 run pip install .
 run python -m pip install jupyterlab ipykernel \
