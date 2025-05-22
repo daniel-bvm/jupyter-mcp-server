@@ -28,6 +28,7 @@ dependencies = [
     "jupyter_server_ydoc",
     "pillow",
     "psycopg2",
+    "psycopg2-binary",
     "mysql-connector-python",
     "pandas",
     "numpy",
