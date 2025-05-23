@@ -26,19 +26,7 @@ dependencies = [
     "jupyterlab",
     "ipykernel",
     "jupyter_server_ydoc",
-    "pillow",
-    "psycopg2-binary",
-    "mysql-connector-python",
-    "pandas",
-    "numpy",
-    "matplotlib",
-    "scipy",
-    "scikit-learn",
-    "seaborn",
-    "plotly",
-    "yfinance",
-    "python-dotenv",
-    "tqdm"
+    "pillow"
 ]
 
 [project.optional-dependencies]
