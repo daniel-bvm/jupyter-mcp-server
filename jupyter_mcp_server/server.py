@@ -1140,7 +1140,7 @@ if __name__ == "__main__":
     # Only proceed if kernel started successfully
     try:
         if kernel:
-                asyncio.run(main())
+            asyncio.run(main())
         else:
             logger.critical("Could not initialize Jupyter Kernel client. Server cannot start.")
 
