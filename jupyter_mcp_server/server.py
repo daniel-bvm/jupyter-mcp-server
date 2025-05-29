@@ -37,6 +37,7 @@ NOTEBOOK_PATH = os.getenv("NOTEBOOK_PATH", "notebook.ipynb")
 NOTEBOOK_PORT = os.getenv("NOTEBOOK_PORT", 34587)
 SERVER_URL = os.getenv("SERVER_URL", f"http://127.0.0.1:{NOTEBOOK_PORT}")
 TOKEN = ""
+HTTP_DISPLAY_URL = os.getenv("HTTP_DISPLAY_URL", SERVER_URL)
 
 STARTUP_TIMEOUT_SECONDS = 5
 OUTPUT_WAIT_DELAY = float(os.getenv("OUTPUT_WAIT_DELAY", "5"))
@@ -1041,6 +1042,7 @@ async def main():
 
     logger.info(f"Starting Jupyter MCP Server main async function...")
     logger.info(f"Target notebook: {NOTEBOOK_PATH} on {SERVER_URL} [Log Level: {LOG_LEVEL}]")
+    logger.info(f"HTTP display URL: {HTTP_DISPLAY_URL}")
 
     # Kernel should be initialized in the __main__ block before calling main()
     if not kernel or not kernel.is_alive():
