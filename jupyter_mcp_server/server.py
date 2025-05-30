@@ -259,7 +259,7 @@ def create_empty_notebook_file(path: str):
         f.write(json.dumps(empty_content))
 
 
-# @mcp.tool()
+
 async def list_notebook_directory() -> str:
     """
     Lists files and directories in the target notebook's location.
@@ -301,7 +301,7 @@ async def list_notebook_directory() -> str:
         return f"[Unexpected Error in {tool_name}: {e}]"
 
 
-# @mcp.tool()
+
 async def get_file_content(file_path: str) -> str:
     """
     Retrieves file content. Text is returned directly. Images are resized
@@ -392,7 +392,7 @@ async def get_file_content(file_path: str) -> str:
         logger.error(f"[{tool_name}] Unexpected error for '{file_path}': {e}", exc_info=True)
         return f"[Unexpected Error in {tool_name} for '{file_path}': {e}]"
 
-# @mcp.tool()
+
 def set_target_notebook(new_notebook_path: str) -> str:
     """
     Changes the target notebook path for subsequent tool calls (session only).
@@ -415,7 +415,7 @@ def set_target_notebook(new_notebook_path: str) -> str:
     return f"Target notebook path set to '{NOTEBOOK_PATH}'."
 
 
-# @mcp.tool()
+
 async def insert_cell(content: str, cell_type: str, index: Optional[int] = None) -> str:
     """
     Adds a cell ('code' or 'markdown') with content at specified index (or appends).
@@ -561,7 +561,7 @@ async def execute_cell(cell_index: int) -> str:
         return f"[Error preparing execution for cell {cell_index}: {e}]"
 
 
-# @mcp.tool()
+
 async def execute_all_cells() -> str:
     """
     Sends execution requests sequentially for all code cells (fire-and-forget).
@@ -624,7 +624,7 @@ async def execute_all_cells() -> str:
         return f"[Error in {tool_name}: {e}]"
 
 
-# @mcp.tool()
+
 async def get_cell_output(cell_index: int, wait_seconds: float = OUTPUT_WAIT_DELAY) -> str:
     """
     Retrieves output of a code cell by index. Waits briefly if requested.
@@ -700,7 +700,7 @@ async def delete_cell(cell_index: int) -> str:
         return f"[Error deleting cell {cell_index}: {e}]"
 
 
-# @mcp.tool()
+
 async def move_cell(from_index: int, to_index: int) -> str:
     """
     Moves a cell from from_index to to_index using simple delete/re-insert.
@@ -755,7 +755,7 @@ async def clear_notebook() -> str:
         return f"[Error clearing notebook: {e}]"
 
 
-# @mcp.tool()
+
 async def search_notebook_cells(search_string: str, case_sensitive: bool = False) -> List[Dict[str, Any]]:
     """
     Searches cell sources for a string. Returns list of matching cells.
@@ -807,7 +807,7 @@ async def search_notebook_cells(search_string: str, case_sensitive: bool = False
         return [] # Return empty list on unexpected errors
 
 
-# @mcp.tool()
+
 async def split_cell(cell_index: int, line_number: int) -> str:
     """
     Splits a cell at a specific line number (1-based).
@@ -942,7 +942,11 @@ async def edit_cell_source(cell_index: int, new_content: str) -> str:
                     cell_data["source"] = YText(new_content)
 
             logger.info(f"[{tool_name}] Updated source for cell index {cell_index}.")
-            return f"Source updated for cell at index {cell_index}."
+
+            res = await execute_cell(cell_index)
+            logger.info(f"[{tool_name}] Cell {cell_index} executed after edit. Result: {res}")
+            # Return success message with execution result
+            return f"Cell source updated at index {cell_index}. Execution result: {res}"
 
     except Exception as e:
         logger.error(f"[{tool_name}] Tool execution failed for index {cell_index}: {e}", exc_info=True)
@@ -964,7 +968,7 @@ async def get_kernel_variables(wait_seconds: int = 2) -> str:
     return await _run_temporary_code(code_content, wait_seconds, tool_name)
 
 
-# @mcp.tool()
+
 async def get_all_outputs() -> dict[int, str]:
     """
     Retrieves output strings for all code cells.
@@ -998,7 +1002,7 @@ async def get_all_outputs() -> dict[int, str]:
         return {-1: f"[Error retrieving outputs: {e}]"} # Return error indicator
 
 
-# @mcp.tool()
+
 async def install_package(package_name: str, timeout_seconds: int = 60) -> str:
     """
     Installs a package in the kernel using '!pip install' via a temporary cell.
@@ -1019,7 +1023,7 @@ async def install_package(package_name: str, timeout_seconds: int = 60) -> str:
     return await _run_temporary_code(code_content, timeout_seconds, tool_name)
 
 
-# @mcp.tool()
+
 async def list_installed_packages(wait_seconds: int = 5) -> str:
     """
     Lists installed packages in the kernel using '!pip list' via a temporary cell.
@@ -1140,7 +1144,20 @@ if __name__ == "__main__":
     # Only proceed if kernel started successfully
     try:
         if kernel:
-            asyncio.run(main())
+            async def startup_sequence():
+                try:
+                    # Wait a little for Yjs synchronization to settle (optional)
+                    await asyncio.sleep(1)
+                    logger.info("Running `clear_notebook()` to wipe cells on startup...")
+                    result = await clear_notebook()
+                    logger.info(f"Notebook cleared: {result}")
+                except Exception as e:
+                    logger.error(f"Failed to clear notebook on startup: {e}", exc_info=True)
+
+                await main()  # Proceed to main MCP loop
+
+            asyncio.run(startup_sequence())
+
         else:
             logger.critical("Could not initialize Jupyter Kernel client. Server cannot start.")
 
