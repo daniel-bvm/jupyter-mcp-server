@@ -550,7 +550,7 @@ async def execute_cell(cell_index: int) -> str:
                 await asyncio.to_thread(notebook.execute_cell, cell_index, kernel)
                 logger.info(f"[{tool_name}] Execution request dispatched for cell {cell_index}.")
                 output = await get_cell_output(cell_index)
-                return f"Execution request sent for cell at index {cell_index}. Output: {output}"
+                return f"Execution request sent for cell at index {cell_index}. Output: {output[-2000:] if len(output) > 2000 else output}"
             except Exception as exec_dispatch_err:
                 logger.error(f"[{tool_name}] Error dispatching execution request: {exec_dispatch_err}", exc_info=True)
                 return f"[Error dispatching execution for cell {cell_index}: {exec_dispatch_err}]"
@@ -1090,16 +1090,22 @@ def wait_for_server_ready(host: str, port: int, timeout_seconds=5):
     return False
 
 
-
-
 # --- Entry point ---
 if __name__ == "__main__":
     # Perform synchronous setup here, like kernel initialization
-
-
     root_dir = os.path.join(os.getcwd(), "notebooks")
     os.makedirs(root_dir, exist_ok=True)
     create_empty_notebook_file(os.path.join(os.getcwd(), NOTEBOOK_PATH))
+    config_path = "~/.jupyter/lab/user-settings/@jupyterlab/apputils-extension/themes.jupyterlab-settings"
+    if not os.path.exists(os.path.expanduser(config_path)):
+        os.makedirs(os.path.dirname(os.path.expanduser(config_path)), exist_ok=True)
+        with open(os.path.expanduser(config_path), 'w') as f:
+            f.write('{"theme":"JupyterLab Dark"}')
+    else:
+        config = json.load(open(os.path.expanduser(config_path)))
+        config["theme"] = "JupyterLab Dark"
+        with open(os.path.expanduser(config_path), 'w') as f:
+            json.dump(config, f)
 
     process = subprocess.Popen(
         [
