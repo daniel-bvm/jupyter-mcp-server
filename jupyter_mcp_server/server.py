@@ -1109,6 +1109,7 @@ if __name__ == "__main__":
             # "--notebook-dir", root_dir,
             "--allow_remote_access", "true",
             "--ServerApp.disable_check_xsrf", "true",
+            "--ServerApp.use_xheaders", "true",  # use in relative context
             "--ServerApp.token", "",
             "--ServerApp.password", "",
             "--ServerApp.allow_origin", "*",
