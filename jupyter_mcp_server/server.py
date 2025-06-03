@@ -29,6 +29,7 @@ import asyncio
 import sys
 import json
 from typing import Any
+import socket
 
 # --- MCP Instance ---
 mcp = FastMCP("jupyter")
@@ -38,6 +39,7 @@ NOTEBOOK_PORT = os.getenv("NOTEBOOK_PORT", 34587)
 SERVER_URL = os.getenv("SERVER_URL", f"http://127.0.0.1:{NOTEBOOK_PORT}")
 TOKEN = ""
 HTTP_DISPLAY_URL = os.getenv("HTTP_DISPLAY_URL", SERVER_URL)
+WEBBASE_URL = os.getenv("WEBBASE_URL", "/")
 
 STARTUP_TIMEOUT_SECONDS = 5
 OUTPUT_WAIT_DELAY = float(os.getenv("OUTPUT_WAIT_DELAY", "5"))
@@ -124,7 +126,7 @@ async def notebook_connection(tool_name: str, modify: bool = False) -> AsyncGene
     logger.debug(f"[{tool_name}] Establishing notebook connection...")
     try:
         notebook = NbModelClient(
-            get_jupyter_notebook_websocket_url(server_url=SERVER_URL, token=TOKEN, path=NOTEBOOK_PATH)
+            get_jupyter_notebook_websocket_url(server_url=SERVER_URL + WEBBASE_URL, token=TOKEN, path=NOTEBOOK_PATH)
         )
         # Setting awareness might be desired here or within the tool
         # _try_set_awareness(notebook, tool_name) # Optional: uncomment if always needed
@@ -1107,14 +1109,24 @@ if __name__ == "__main__":
         with open(os.path.expanduser(config_path), 'w') as f:
             json.dump(config, f)
 
+    web_base_url = WEBBASE_URL
+    if not web_base_url.startswith("/"):
+        web_base_url = "/" + web_base_url
+    if not web_base_url.endswith("/"):
+        web_base_url += "/"
+
     process = subprocess.Popen(
         [
             "jupyter", "lab",
             "--port", str(NOTEBOOK_PORT),
             "--ip", "0.0.0.0",
             # "--notebook-dir", root_dir,
+            # "--ServerApp.base_url", "./",
             "--allow_remote_access", "true",
             "--ServerApp.disable_check_xsrf", "true",
+            # "--ServerApp.base_urlUnicode", WEBBASE_URL,
+            # "--NotebookApp.base_urlUnicode", WEBBASE_URL,
+            "--ServerApp.base_url", web_base_url,
             "--ServerApp.use_xheaders", "true",  # use in relative context
             "--ServerApp.token", "",
             "--ServerApp.password", "",
@@ -1127,6 +1139,25 @@ if __name__ == "__main__":
         env=os.environ,
     )
 
+    # Find a free port other than NOTEBOOK_PORT to server a second Jupyter server
+    # alt_port = find_free_port(NOTEBOOK_PORT)
+    # alt_process = subprocess.Popen(
+    #     [
+    #         "jupyter", "lab",
+    #         "--port", str(alt_port),
+    #         "--ip", "0.0.0.0",
+    #         "--ServerApp.base_url", WEBBASE_URL,  # 0.0.0.0:alt_port/WEBBASE_URL
+    #         "--allow_remote_access", "true",
+    #         "--ServerApp.disable_check_xsrf", "true",
+    #         "--ServerApp.use_xheaders", "true",  # use in relative context
+    #         "--ServerApp.token", "",
+    #         "--ServerApp.password", "",
+    #         "--ServerApp.allow_origin", "*",
+    #         "--ServerApp.allow_root", "true",
+    #         "--ServerApp.open_browser", "false"
+    #     ],
+    # )
+
     if not wait_for_server_ready('localhost', NOTEBOOK_PORT, STARTUP_TIMEOUT_SECONDS):
         logger.error(f"Server failed to start after {STARTUP_TIMEOUT_SECONDS} seconds")
         process.terminate()
@@ -1134,7 +1165,7 @@ if __name__ == "__main__":
 
     logger.info(f"Initializing KernelClient synchronously for {SERVER_URL}...")
     try:
-        kernel = KernelClient(server_url=SERVER_URL, token=TOKEN)
+        kernel = KernelClient(server_url=SERVER_URL + WEBBASE_URL, token=TOKEN)
         # Start is synchronous in the library version used previously
         kernel.start()
         # Add a small delay/check to ensure it's alive? Library might block until ready.

@@ -126,6 +126,7 @@ docs/.yarn/*
 uv.lock
 
 scripts/docker.sh
+scripts/run.sh
 
 .tmp/
 old_system_prompt.txt
