@@ -9,7 +9,6 @@ ENV NOTEBOOK_PATH="notebook.ipynb"
 ENV NOTEBOOK_PORT="34587"
 ENV HTTP_DISPLAY_URL="http://localhost:$NOTEBOOK_PORT/doc/tree/$NOTEBOOK_PATH"
 ENV PIP_ROOT_USER_ACTION=ignore
-ENV WEBBASE_URL="gateway/34569"
 
 # Show pip installation logs
 # ENV PIP_QUIET=
