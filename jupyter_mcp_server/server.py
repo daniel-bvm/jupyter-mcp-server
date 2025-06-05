@@ -955,7 +955,6 @@ async def edit_cell_source(cell_index: int, new_content: str) -> str:
         return f"[Error editing cell {cell_index}: {e}]"
 
 
-@mcp.tool()
 async def get_kernel_variables(wait_seconds: int = 2) -> str:
     """
     Lists variables in the kernel namespace using %whos via a temporary cell.
