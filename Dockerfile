@@ -1,5 +1,5 @@
-# FROM nikolasigmoid/jupyter-mcp-base:latest
-FROM nikolasigmoid/py-mcp-proxy:latest
+FROM nikolasigmoid/jupyter-mcp-base:latest
+# FROM nikolasigmoid/py-mcp-proxy:latest
 
 COPY jupyter_mcp_server jupyter_mcp_server
 COPY pyproject.toml pyproject.toml
