@@ -29,7 +29,6 @@ import asyncio
 import sys
 import json
 from typing import Any
-import socket
 import string
 
 def remove_unsafe_characters(text: str) -> str:
@@ -1109,9 +1108,10 @@ def wait_for_server_ready(host: str, port: int, timeout_seconds=5):
 # --- Entry point ---
 if __name__ == "__main__":
     # Perform synchronous setup here, like kernel initialization
-    root_dir = os.path.join(os.getcwd(), "notebooks")
+    root_dir = os.path.join("/storage", "notebooks")
     os.makedirs(root_dir, exist_ok=True)
-    create_empty_notebook_file(os.path.join(os.getcwd(), NOTEBOOK_PATH))
+    create_empty_notebook_file(os.path.join(root_dir, NOTEBOOK_PATH))
+
     config_path = "~/.jupyter/lab/user-settings/@jupyterlab/apputils-extension/themes.jupyterlab-settings"
     if not os.path.exists(os.path.expanduser(config_path)):
         os.makedirs(os.path.dirname(os.path.expanduser(config_path)), exist_ok=True)
@@ -1135,13 +1135,10 @@ if __name__ == "__main__":
             "--port", str(NOTEBOOK_PORT),
             "--ip", "0.0.0.0",
             # "--notebook-dir", root_dir,
-            # "--ServerApp.base_url", "./",
             "--allow_remote_access", "true",
             "--ServerApp.disable_check_xsrf", "true",
-            # "--ServerApp.base_urlUnicode", WEBBASE_URL,
-            # "--NotebookApp.base_urlUnicode", WEBBASE_URL,
             "--ServerApp.base_url", web_base_url,
-            "--ServerApp.use_xheaders", "true",  # use in relative context
+            "--ServerApp.trust_xheaders", "true",  # use in relative context
             "--ServerApp.websocket_ping_interval", "30",
             "--ServerApp.websocket_ping_timeout", "60",
             "--ServerApp.token", "",
@@ -1150,9 +1147,10 @@ if __name__ == "__main__":
             "--ServerApp.allow_root", "true",
             "--ServerApp.open_browser", "false"
         ],
-        stderr=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
+        stderr=sys.stderr,
+        stdout=sys.stderr,
         env=os.environ,
+        cwd=root_dir
     )
 
     if not wait_for_server_ready('localhost', NOTEBOOK_PORT, STARTUP_TIMEOUT_SECONDS):
