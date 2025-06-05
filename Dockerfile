@@ -1,4 +1,5 @@
-FROM nikolasigmoid/jupyter-mcp-base:latest
+# FROM nikolasigmoid/jupyter-mcp-base:latest
+FROM nikolasigmoid/py-mcp-proxy:latest
 
 COPY jupyter_mcp_server jupyter_mcp_server
 COPY pyproject.toml pyproject.toml
@@ -9,19 +10,19 @@ ENV HTTP_DISPLAY_URL="http://localhost:$NOTEBOOK_PORT/doc/tree/$NOTEBOOK_PATH"
 ENV PIP_ROOT_USER_ACTION=ignore
 
 # Show pip installation logs
-# ENV PIP_QUIET=
-# ENV PIP_NO_PROGRESS_BAR=
-# ENV PIP_NO_COLOR=
+ENV PIP_QUIET=
+ENV PIP_NO_PROGRESS_BAR=
+ENV PIP_NO_COLOR=
 
 RUN apt-get update && apt-get install -y libpq-dev gcc
 
 RUN pip install .
 RUN python -m pip install jupyterlab ipykernel \
-&& python -m pip install "jupyter_collaboration==4.0.1"
+    && python -m pip install "jupyter_collaboration==4.0.1"
 
 RUN sed -i '/"owner": self._username,/a \                "name": self._username,' /usr/local/lib/python3.12/site-packages/jupyter_nbmodel_client/client.py \
-&& echo "Patched jupyter_nbmodel_client/client.py to include user name in awareness." \
-|| echo "WARNING: Failed to patch jupyter_nbmodel_client/client.py"
+    && echo "Patched jupyter_nbmodel_client/client.py to include user name in awareness." \
+    || echo "WARNING: Failed to patch jupyter_nbmodel_client/client.py"
 
 EXPOSE 34587
 RUN pip install --force-reinstall --no-cache-dir pycrdt

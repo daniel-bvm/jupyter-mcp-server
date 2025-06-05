@@ -663,6 +663,17 @@ async def get_cell_output(cell_index: int, wait_seconds: float = OUTPUT_WAIT_DEL
                 # Convert Yjs outputs (usually maps) to Python dicts for processing
                 output_texts = [extract_output(dict(output)) for output in outputs]
                 cell_output_str = "\n".join(output_texts).strip()
+                # Filter out only utf-8 compatible text
+                cell_output_str = re.sub(r'[^\x20-\x7E\n]+', '', cell_output_str)  # Remove non-ASCII characters
+                # Find the text "Successfully installed" in the output
+                if "Successfully installed" in cell_output_str:
+                    # find the last occurrence of "Successfully installed"
+                    last_success_index = cell_output_str.rfind("Successfully installed")
+                    # Drop the text before the last occurrence
+                    cell_output_str = cell_output_str[last_success_index:]
+                # Get the last 30000 characters to avoid excessive output
+                if len(cell_output_str) > 30000:
+                    cell_output_str = cell_output_str[-30000:]
                 return cell_output_str if cell_output_str else "[Cell output is empty]"
             else:
                 # Check if it's a code cell that might have run without output
@@ -1131,6 +1142,8 @@ if __name__ == "__main__":
             # "--NotebookApp.base_urlUnicode", WEBBASE_URL,
             "--ServerApp.base_url", web_base_url,
             "--ServerApp.use_xheaders", "true",  # use in relative context
+            "--ServerApp.websocket_ping_interval", "30",
+            "--ServerApp.websocket_ping_timeout", "60",
             "--ServerApp.token", "",
             "--ServerApp.password", "",
             "--ServerApp.allow_origin", "*",
@@ -1141,25 +1154,6 @@ if __name__ == "__main__":
         stdout=subprocess.DEVNULL,
         env=os.environ,
     )
-
-    # Find a free port other than NOTEBOOK_PORT to server a second Jupyter server
-    # alt_port = find_free_port(NOTEBOOK_PORT)
-    # alt_process = subprocess.Popen(
-    #     [
-    #         "jupyter", "lab",
-    #         "--port", str(alt_port),
-    #         "--ip", "0.0.0.0",
-    #         "--ServerApp.base_url", WEBBASE_URL,  # 0.0.0.0:alt_port/WEBBASE_URL
-    #         "--allow_remote_access", "true",
-    #         "--ServerApp.disable_check_xsrf", "true",
-    #         "--ServerApp.use_xheaders", "true",  # use in relative context
-    #         "--ServerApp.token", "",
-    #         "--ServerApp.password", "",
-    #         "--ServerApp.allow_origin", "*",
-    #         "--ServerApp.allow_root", "true",
-    #         "--ServerApp.open_browser", "false"
-    #     ],
-    # )
 
     if not wait_for_server_ready('localhost', NOTEBOOK_PORT, STARTUP_TIMEOUT_SECONDS):
         logger.error(f"Server failed to start after {STARTUP_TIMEOUT_SECONDS} seconds")
@@ -1174,10 +1168,10 @@ if __name__ == "__main__":
         # Add a small delay/check to ensure it's alive? Library might block until ready.
         # Let's assume start() blocks or is fast enough.
         if kernel.is_alive():
-             logger.info("KernelClient started successfully synchronously.")
+            logger.info("KernelClient started successfully synchronously.")
         else:
-             logger.error("KernelClient failed to start synchronously.")
-             kernel = None # Ensure kernel is None if start fails
+            logger.error("KernelClient failed to start synchronously.")
+            kernel = None # Ensure kernel is None if start fails
     except Exception as e:
         logger.error(f"Failed to initialize KernelClient at startup: {e}", exc_info=True)
         kernel = None
