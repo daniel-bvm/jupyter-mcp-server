@@ -1,4 +1,4 @@
-FROM danieltn11/jupyter-base-mcp:latest
+FROM docker.io/nikolasigmoid/jupyter-mcp-base:latest
 
 COPY jupyter_mcp_server jupyter_mcp_server
 COPY pyproject.toml pyproject.toml
