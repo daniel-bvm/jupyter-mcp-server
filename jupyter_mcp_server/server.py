@@ -1131,10 +1131,9 @@ if __name__ == "__main__":
 
     process = subprocess.Popen(
         [
-            "jupyter", "lab",
+            "jupyter", "notebook",
             "--port", str(NOTEBOOK_PORT),
             "--ip", "0.0.0.0",
-            # "--notebook-dir", root_dir,
             "--allow_remote_access", "true",
             "--ServerApp.disable_check_xsrf", "true",
             "--ServerApp.base_url", web_base_url,
