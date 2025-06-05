@@ -30,6 +30,10 @@ import sys
 import json
 from typing import Any
 import socket
+import string
+
+def remove_unsafe_characters(text: str) -> str:
+    return "".join(c for c in text if c in string.printable)
 
 # --- MCP Instance ---
 mcp = FastMCP("jupyter")
