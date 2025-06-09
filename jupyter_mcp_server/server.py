@@ -1110,7 +1110,8 @@ if __name__ == "__main__":
     # Perform synchronous setup here, like kernel initialization
     root_dir = os.path.join("/storage", "notebooks")
     os.makedirs(root_dir, exist_ok=True)
-    create_empty_notebook_file(os.path.join(root_dir, NOTEBOOK_PATH))
+    if not os.path.exists(os.path.join(root_dir, NOTEBOOK_PATH)):
+        create_empty_notebook_file(os.path.join(root_dir, NOTEBOOK_PATH))
 
     config_path = "~/.jupyter/lab/user-settings/@jupyterlab/apputils-extension/themes.jupyterlab-settings"
     if not os.path.exists(os.path.expanduser(config_path)):
