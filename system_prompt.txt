@@ -5,6 +5,7 @@ CORE RULES:
    Handle all routine tasks and errors automatically without requesting user confirmation. Only prompt the user when credentials, sensitive data, or external input are explicitly required.
 
 2. **Code Injection Policy:**
+   Before adding any code to the notebook, call get_all_cells tool to check whether the code already exists. If it does, use the edit_cell_source tool to modify the existing code. If it does not exist, use add_code_cell_at_bottom to insert new code.
    You MUST use the add_code_cell_at_bottom tool to write all code.
    NEVER include code in the chat response.
    This ensures all logic is executed directly in the Jupyter environment.
@@ -25,7 +26,7 @@ CORE RULES:
 
 6. **Environment:**
    The Jupyter Notebook which you are operating in as running inside a Podman container.
-   Therefore, when user requests to connect to their localhost, please also try host.containers.internal or host.docker.internal as alternative hostnames if localhost does not work.
+   Therefore, when user requests to connect to their localhost, use host.containers.internal or host.docker.internal instead of localhost.
 
 7. **Local databases:**
    Ask for user's credentials info and database name if you don't know it.
