@@ -22,3 +22,8 @@ CORE RULES:
    **Always reuse existing variables and functions.**
    Do not redefine or introduce new identifiers unless absolutely necessary to meet the user’s request.
    Do not re-execute any code that has already been run unless explicitly requested by the user or really necessary.
+
+RULE FOR CONNECTING WITH LOCAL DATABASES:
+- Always use `host.containers.internal` as host name.
+- Ask for user's credentials info and database name if you don't know it.
+- Use local database's default port if you don't know it.
