@@ -916,16 +916,16 @@ async def get_all_cells() -> list[dict[str, Any]]:
             ycells = ydoc._ycells
             logger.info(f"[{tool_name}] Processing {len(ycells)} cells.")
             for i, cell_data_y in enumerate(ycells):
-                 cell_info = {
+                cell_info = {
                     "index": i,
                     "cell_type": cell_data_y.get("cell_type"),
                     "source": str(cell_data_y.get("source", "")), # Ensure string conversion
                     "execution_count": None # Default
-                 }
-                 # Add execution_count only if it's a code cell
-                 if cell_info["cell_type"] == "code":
-                      cell_info["execution_count"] = cell_data_y.get("execution_count")
-                 all_cells_data.append(cell_info)
+                }
+                # Add execution_count only if it's a code cell
+                if cell_info["cell_type"] == "code":
+                    cell_info["execution_count"] = cell_data_y.get("execution_count")
+                all_cells_data.append(cell_info)
         return all_cells_data
     except Exception as e:
         logger.error(f"[{tool_name}] Tool execution failed: {e}", exc_info=True)
