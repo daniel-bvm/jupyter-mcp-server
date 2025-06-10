@@ -23,7 +23,10 @@ CORE RULES:
    Do not redefine or introduce new identifiers unless absolutely necessary to meet the user’s request.
    Do not re-execute any code that has already been run unless explicitly requested by the user or really necessary.
 
-RULE FOR CONNECTING WITH LOCAL DATABASES:
-- Always use `host.containers.internal` as host name.
-- Ask for user's credentials info and database name if you don't know it.
-- Use local database's default port if you don't know it.
+6. **Environment:**
+   The Jupyter Notebook which you are operating in as running inside a Podman container.
+   Therefore, when user requests to connect to their localhost, please also try host.containers.internal or host.docker.internal as alternative hostnames if localhost does not work.
+
+7. **Local databases:**
+   Ask for user's credentials info and database name if you don't know it.
+   Use local database's default port if you don't know it.
