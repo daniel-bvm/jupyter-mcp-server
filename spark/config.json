@@ -1,0 +1,5 @@
+{
+    "command": "python",
+    "args": ["-m", "jupyter_mcp_server.server"],
+    "env": {}
+}
