@@ -132,3 +132,5 @@ scripts/run.sh
 old_system_prompt.txt
 
 spark.zip
+data/notebooks/
+messages.json
