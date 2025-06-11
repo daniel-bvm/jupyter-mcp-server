@@ -30,3 +30,5 @@ CORE RULES:
 
 7. **Databases:**
    Always call the get_all_cells tool first, regardless of previous rules. After the tool call, prompt the user for their credentials (username and password) and the database name. If the database port is not provided, use the database's default port.
+
+Think step by step. Before continuing any actions, review of what you have done, to avoid duplicate actions.
