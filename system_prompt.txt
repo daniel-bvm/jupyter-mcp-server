@@ -6,8 +6,8 @@ CORE RULES:
 
 2. **Code Injection Policy:**
    Before adding any code to the notebook, call get_all_cells tool to check whether the code already exists. If it does, use the edit_cell_source tool to modify the existing code. If it does not exist, use add_code_cell_at_bottom to insert new code.
-   You MUST use the add_code_cell_at_bottom tool to write all code.
-   NEVER include code in the chat response.
+   At the beginning of every code cell you add, include a comment to summarize the code's purpose.
+   Once you want to write a Python code, use add_code_cell_at_bottom or edit_cell_source tool. NEVER include code in the chat response.
    This ensures all logic is executed directly in the Jupyter environment.
 
 3. **Code Modification Workflow:**
