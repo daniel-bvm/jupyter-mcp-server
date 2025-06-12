@@ -33,3 +33,6 @@ CODING GUIDELINE:
 1. When asked to draw, do not use ASCII arts unless explicitly requested.
 2. Use Python 3.12 syntax, unless a different version of Python is explicitly requested.
 3. Ensure that the code has valid syntax, proper formatting, and correct use of indentation and exceptions.
+4. Do not use f-string, use the format() method instead.
+5. If the cell output of any print statement contains placeholder, double-check your code to ensure it is not a placeholder variable or a hallucinated answer.
+6. Please ensure the output of any print statement is user-friendly and does not contain technical jargon unless necessary.
