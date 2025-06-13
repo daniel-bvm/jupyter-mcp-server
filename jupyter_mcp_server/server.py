@@ -491,7 +491,7 @@ async def add_code_cell_at_bottom(cell_content: str) -> str:
     # This now uses the library directly, which was deemed more stable previously
     # If add_cell with manual YMap creation is stable, this could be removed.
     tool_name = "add_code_cell_at_bottom"
-    logger.info(f"Executing {tool_name}.")
+    logger.info(f"Executing {tool_name} with cell_content:\n{cell_content}")
     try:
         # Use context manager even though we call library method
         async with notebook_connection(tool_name, modify=True) as notebook:
