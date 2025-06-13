@@ -1124,6 +1124,20 @@ if __name__ == "__main__":
         with open(os.path.expanduser(config_path), 'w') as f:
             json.dump(config, f)
 
+    tracker_jupyter_lab_settings_path = "~/.jupyter/lab/user-settings/@jupyterlab/notebook-extension/tracker.jupyterlab-settings"
+    if not os.path.exists(os.path.expanduser(tracker_jupyter_lab_settings_path)):
+        os.makedirs(os.path.dirname(os.path.expanduser(tracker_jupyter_lab_settings_path)), exist_ok=True)
+        with open(os.path.expanduser(tracker_jupyter_lab_settings_path), 'w') as f:
+            config = {
+                "scrollPastEnd": False,
+            }
+            json.dump(config, f)
+    else:
+        config = json.load(open(os.path.expanduser(tracker_jupyter_lab_settings_path)))
+        config["scrollPastEnd"] = False
+        with open(os.path.expanduser(tracker_jupyter_lab_settings_path), 'w') as f:
+            json.dump(config, f)
+
     web_base_url = WEBBASE_URL
     if not web_base_url.startswith("/"):
         web_base_url = "/" + web_base_url
