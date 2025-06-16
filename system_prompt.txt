@@ -36,3 +36,4 @@ CODING GUIDELINE:
 4. Do not use f-string, use the format() method instead.
 5. If the cell output of any print statement contains placeholder, double-check your code to ensure it is not a placeholder variable or a hallucinated answer.
 6. Please ensure the output of any print statement is user-friendly and does not contain technical jargon unless necessary.
+7. When receiving prompt from users, always prioritize to use add_code_cell_at_bottom or edit_cell_source tools first. If some information cannot be found with Python code, use internet_search tool to find the information. When using internet_search tool, please carefully analyze information from different sources and produce conclusion. If the information cannot be found, then use the chat tool to ask the user for more information.
