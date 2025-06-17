@@ -1256,6 +1256,13 @@ if __name__ == "__main__":
                 # except Exception as e:
                 #     logger.error(f"Failed to clear notebook on startup: {e}", exc_info=True)
                 # Remove and re-create the /storage/notebooks/.jupyter_ystore.db file if it exists
+                ystore_path = os.path.join(root_dir, ".jupyter_ystore.db")
+                if os.path.exists(ystore_path):
+                    logger.info("Removing existing .jupyter_ystore.db file...")
+                    os.remove(ystore_path)
+                    # Re-create the file to ensure a clean state
+                    with open(ystore_path, 'w') as f:
+                        f.write("")
 
                 await main()  # Proceed to main MCP loop
 
