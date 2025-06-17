@@ -16,6 +16,7 @@ from functools import partial
 import io
 from PIL import Image # If Pillow is installed
 import base64
+import shlex
 from pycrdt import Array as YArray, Map as YMap, Text as YText
 from contextlib import asynccontextmanager # Added for context manager
 
@@ -1103,6 +1104,59 @@ def wait_for_server_ready(host: str, port: int, timeout_seconds=5):
             time.sleep(0.1)
 
     return False
+
+
+async def run_terminal_command(command: str):
+    command = "!" + command  # Ensure it runs as a shell command
+    result = await add_code_cell_at_bottom(command)
+    return result
+
+
+@mcp.tool()
+async def internet_search(query: str) -> str:
+    """
+    Search the general related information on the Internet.
+    Only use this tool if you fail to find the information with inserting code to Python notebook.
+
+    Args:
+        query: Query to search for
+
+    Returns: Related information
+    """
+
+    request_payload = {
+        "url": "https://api.tavily.com/search",
+        "headers": {
+            "Content-Type": "application/json",
+        },
+        "body": {
+            "query": query,
+            "max_results": 5,
+            "include_image_descriptions": True,
+            "include_images": True,
+            "search_depth": "advanced",
+            "topic": "general"
+        },
+        "method": "POST"
+    }
+
+    full_data = {
+        "messages": [
+            {
+                "role": "user",
+                "content": json.dumps(request_payload)
+            }
+        ]
+    }
+
+    # Quote the entire JSON string safely for shell
+    quoted_data = shlex.quote(json.dumps(full_data))
+
+    # Safely include env variable reference in the command string
+    command = f"curl -X POST $ETERNALAI_MCP_PROXY_URL -H 'Content-Type: application/json' -d {quoted_data}"
+
+    res = await run_terminal_command(command)
+    return res
 
 
 # --- Entry point ---
