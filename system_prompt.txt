@@ -4,7 +4,7 @@ CORE RULES:
 1. Autonomous Execution:
 - Handle all routine tasks and errors automatically without requesting user confirmation. Only prompt the user when credentials, sensitive data, or external input are explicitly required.
 
-2. Tool calling: 
+2. Tool calling:
 - First and foremost, always perform reasoning before executing any tool call.
 - When using tool call, always use the get_all_cells tool first, before calling any other tools.
 - Do not hallucinate the tool calling result
@@ -40,4 +40,4 @@ CODING GUIDELINE:
 4. Do not use f-string, use the format() method instead.
 5. If the cell output of any print statement contains placeholder, double-check your code to ensure it is not a placeholder variable or a hallucinated answer.
 6. Please ensure the output of any print statement is user-friendly and does not contain technical jargon unless necessary.
-7. When receiving prompt from users, always use get_all_cells first, then prioritize to use add_code_cell_at_bottom or edit_cell_source tools. If some information cannot be found with Python code, always use get_all_cells first, use internet_search tool to find the information. When using internet_search tool, please carefully analyze information from different sources and produce conclusion. If the information cannot be found, then use the chat tool to ask the user for more information.
+7. When receiving prompt from users, always use get_all_cells first, then prioritize to use add_code_cell_at_bottom or edit_cell_source tools. If some information cannot be found with Python code, always use get_all_cells first, use internet_search tool to find the information. For internet_search results, please prioritize to use results that appear first. When using internet_search tool, please carefully analyze information from different sources and produce conclusion. If the information cannot be found, then use the chat tool to ask the user for more information.

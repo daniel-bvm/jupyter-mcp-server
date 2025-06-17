@@ -556,7 +556,7 @@ async def execute_cell(cell_index: int) -> str:
                 await asyncio.to_thread(notebook.execute_cell, cell_index, kernel)
                 logger.info(f"[{tool_name}] Execution request dispatched for cell {cell_index}.")
                 output = await get_cell_output(cell_index)
-                return f"Execution request sent for cell at index {cell_index}. Output: {output[-2000:] if len(output) > 2000 else output}"
+                return f"Execution request sent for cell at index {cell_index}. Output: {output[-6000:] if len(output) > 6000 else output}"
             except Exception as exec_dispatch_err:
                 logger.error(f"[{tool_name}] Error dispatching execution request: {exec_dispatch_err}", exc_info=True)
                 return f"[Error dispatching execution for cell {cell_index}: {exec_dispatch_err}]"
