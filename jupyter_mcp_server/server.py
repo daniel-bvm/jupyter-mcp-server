@@ -99,6 +99,28 @@ def _parse_index_from_message(message: str) -> Optional[int]:
     logger.error(f"Could not find index pattern in message: {message}")
     return None
 
+
+def _cleanup_ystore_file():
+    """
+    Cleans up the temporary YStore file if it exists.
+    This is called at the end of the script to ensure no leftover files.
+    """
+    ystore_path = os.path.join(root_dir, ".jupyter_ystore.db")
+    if os.path.exists(ystore_path):
+        try:
+            os.remove(ystore_path)
+            logger.info(f"Removed temporary YStore file: {ystore_path}")
+        except Exception as e:
+            logger.error(f"Failed to remove YStore file {ystore_path}: {e}", exc_info=True)
+    # Re-create the file
+    try:
+        with open(ystore_path, 'w') as f:
+            f.write("")  # Create an empty file
+        logger.info(f"Re-created YStore file: {ystore_path}")
+    except Exception as e:
+        logger.error(f"Failed to re-create YStore file {ystore_path}: {e}", exc_info=True)
+
+
 def extract_output(output: dict) -> str:
     """Extracts readable output from a Jupyter cell output dictionary."""
     # (Implementation remains the same as before)
@@ -126,6 +148,7 @@ def extract_output(output: dict) -> str:
 @asynccontextmanager
 async def notebook_connection(tool_name: str, modify: bool = False) -> AsyncGenerator[NbModelClient, None]:
     """Provides a managed connection to the NbModelClient."""
+    # _cleanup_ystore_file()  # Ensure cleanup of YStore file
     notebook: Optional[NbModelClient] = None
     logger.debug(f"[{tool_name}] Establishing notebook connection...")
     try:
@@ -440,6 +463,7 @@ async def insert_cell(content: str, cell_type: str, index: Optional[int] = None)
         return f"[Error: Invalid cell_type '{cell_type}'. Must be 'code' or 'markdown'.]"
 
     try:
+        _cleanup_ystore_file()  # Ensure cleanup of YStore file
         async with notebook_connection(tool_name, modify=True) as notebook:
             ydoc = notebook._doc
             ycells = ydoc._ycells
@@ -495,6 +519,7 @@ async def add_code_cell_at_bottom(cell_content: str) -> str:
     logger.info(f"Executing {tool_name} with cell_content:\n{cell_content}")
     try:
         # Use context manager even though we call library method
+        _cleanup_ystore_file()  # Ensure cleanup of YStore file
         async with notebook_connection(tool_name, modify=True) as notebook:
              _try_set_awareness(notebook, tool_name) # Set awareness if needed
              # Use the library's potentially more reliable method
@@ -539,6 +564,7 @@ async def execute_cell(cell_index: int) -> str:
     try:
         # Need a brief notebook connection to validate index/type and dispatch execution
         # No modification needed for dispatch itself, but underlying state might change later
+        _cleanup_ystore_file()  # Ensure cleanup of YStore file
         async with notebook_connection(tool_name, modify=False) as notebook:
             ydoc = notebook._doc
             ycells = ydoc._ycells
@@ -596,6 +622,7 @@ async def execute_all_cells() -> str:
     request_error = None
 
     try:
+        _cleanup_ystore_file()  # Ensure cleanup of YStore file
         async with notebook_connection(tool_name, modify=False) as notebook:
             ydoc = notebook._doc
             ycells = ydoc._ycells
@@ -648,6 +675,7 @@ async def get_cell_output(cell_index: int, wait_seconds: float = OUTPUT_WAIT_DEL
 
     try:
         # Read-only operation
+        _cleanup_ystore_file()  # Ensure cleanup of YStore file
         async with notebook_connection(tool_name, modify=False) as notebook:
             ydoc = notebook._doc
             ycells = ydoc._ycells
@@ -697,6 +725,7 @@ async def delete_cell(cell_index: int) -> str:
     tool_name = "delete_cell"
     logger.info(f"Executing {tool_name} for cell index {cell_index}")
     try:
+        _cleanup_ystore_file()  # Ensure cleanup of YStore file
         async with notebook_connection(tool_name, modify=True) as notebook:
             ydoc = notebook._doc
             ycells = ydoc._ycells
@@ -726,6 +755,7 @@ async def move_cell(from_index: int, to_index: int) -> str:
     tool_name = "move_cell"
     logger.info(f"Executing {tool_name} from {from_index} to {to_index}")
     try:
+        _cleanup_ystore_file()  # Ensure cleanup of YStore file
         async with notebook_connection(tool_name, modify=True) as notebook:
             ydoc = notebook._doc
             ycells = ydoc._ycells
@@ -761,6 +791,7 @@ async def clear_notebook() -> str:
     logger.info(f"Executing {tool_name} tool.")
 
     try:
+        _cleanup_ystore_file()  # Ensure cleanup of YStore file
         async with notebook_connection(tool_name, modify=True) as notebook:
             ydoc = notebook._doc
             ycells = ydoc._ycells
@@ -839,6 +870,7 @@ async def split_cell(cell_index: int, line_number: int) -> str:
     if line_number < 1: return "[Error: line_number must be 1 or greater]"
 
     try:
+        _cleanup_ystore_file()  # Ensure cleanup of YStore file
         async with notebook_connection(tool_name, modify=True) as notebook:
             ydoc = notebook._doc
             ycells = ydoc._ycells
@@ -912,6 +944,7 @@ async def get_all_cells() -> list[dict[str, Any]]:
     logger.info(f"Executing {tool_name} tool.")
     all_cells_data = []
     try:
+        _cleanup_ystore_file()  # Ensure cleanup of YStore file
         async with notebook_connection(tool_name, modify=False) as notebook:
             ydoc = notebook._doc
             ycells = ydoc._ycells
@@ -940,6 +973,7 @@ async def edit_cell_source(cell_index: int, new_content: str) -> str:
     tool_name = "edit_cell_source"
     logger.info(f"Executing {tool_name} for cell index {cell_index}")
     try:
+        _cleanup_ystore_file()  # Ensure cleanup of YStore file
         async with notebook_connection(tool_name, modify=True) as notebook:
             ydoc = notebook._doc
             ycells = ydoc._ycells
@@ -996,6 +1030,7 @@ async def get_all_outputs() -> dict[int, str]:
     logger.info(f"Executing {tool_name} tool.")
     all_outputs_map = {}
     try:
+        _cleanup_ystore_file()  # Ensure cleanup of YStore file
         async with notebook_connection(tool_name, modify=False) as notebook:
             ydoc = notebook._doc
             ycells = ydoc._ycells
@@ -1254,6 +1289,8 @@ if __name__ == "__main__":
                     logger.info(f"Notebook cleared: {result}")
                 except Exception as e:
                     logger.error(f"Failed to clear notebook on startup: {e}", exc_info=True)
+
+                _cleanup_ystore_file()  # Clean up any leftover YStore file
 
                 await main()  # Proceed to main MCP loop
 
