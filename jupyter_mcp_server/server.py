@@ -1272,8 +1272,7 @@ if __name__ == "__main__":
             "--ServerApp.password", "",
             "--ServerApp.allow_origin", "*",
             "--ServerApp.allow_root", "true",
-            "--ServerApp.open_browser", "false",
-            # "--YDocExtension.ystore_class=pycrdt_websocket.ystore.TempFileYStore",
+            "--ServerApp.open_browser", "false"
         ],
         stderr=sys.stderr,
         stdout=sys.stderr,
@@ -1306,25 +1305,7 @@ if __name__ == "__main__":
     try:
         if kernel:
             async def startup_sequence():
-                # try:
-                #     # Wait a little for Yjs synchronization to settle (optional)
-                #     await asyncio.sleep(1)
-                #     logger.info("Running `clear_notebook()` to wipe cells on startup...")
-                #     result = await clear_notebook()
-                #     logger.info(f"Notebook cleared: {result}")
-                # except Exception as e:
-                #     logger.error(f"Failed to clear notebook on startup: {e}", exc_info=True)
-                # Remove and re-create the /storage/notebooks/.jupyter_ystore.db file if it exists
-                ystore_path = os.path.join(root_dir, ".jupyter_ystore.db")
-                if os.path.exists(ystore_path):
-                    logger.info("Removing existing .jupyter_ystore.db file...")
-                    os.remove(ystore_path)
-                    # Re-create the file to ensure a clean state
-                    with open(ystore_path, 'w') as f:
-                        f.write("")
-
                 _cleanup_ystore_file()  # Clean up any leftover YStore file
-
                 await main()  # Proceed to main MCP loop
 
             asyncio.run(startup_sequence())
