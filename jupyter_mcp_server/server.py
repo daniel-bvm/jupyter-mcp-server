@@ -31,6 +31,8 @@ import sys
 import json
 from typing import Any
 import string
+import sqlite3
+
 
 def remove_unsafe_characters(text: str) -> str:
     return "".join(c for c in text if c in string.printable)
@@ -101,24 +103,40 @@ def _parse_index_from_message(message: str) -> Optional[int]:
 
 
 def _cleanup_ystore_file():
-    """
-    Cleans up the temporary YStore file if it exists.
-    This is called at the end of the script to ensure no leftover files.
-    """
     ystore_path = os.path.join(root_dir, ".jupyter_ystore.db")
-    if os.path.exists(ystore_path):
-        try:
-            os.remove(ystore_path)
-            logger.info(f"Removed temporary YStore file: {ystore_path}")
-        except Exception as e:
-            logger.error(f"Failed to remove YStore file {ystore_path}: {e}", exc_info=True)
-    # Re-create the file
+
     try:
-        with open(ystore_path, 'w') as f:
-            f.write("")  # Create an empty file
-        logger.info(f"Re-created YStore file: {ystore_path}")
+        conn = sqlite3.connect(ystore_path)
+        cursor = conn.cursor()
+
+        # Step 1: Drop existing tables if they exist
+        cursor.execute("DROP TABLE IF EXISTS updates;")
+        cursor.execute("DROP TABLE IF EXISTS yupdates;")
+        logger.info(f"Dropped existing tables in {ystore_path}")
+
+        # Step 2: Re-create the necessary tables
+        cursor.execute("""
+            CREATE TABLE updates (
+                path TEXT NOT NULL,
+                yupdate BLOB,
+                metadata BLOB,
+                timestamp REAL NOT NULL
+            );
+        """)
+        cursor.execute("""
+            CREATE TABLE yupdates (
+                path TEXT NOT NULL,
+                yupdate BLOB,
+                metadata BLOB,
+                timestamp REAL NOT NULL
+            );
+        """)
+        conn.commit()
+        conn.close()
+        logger.info(f"Recreated tables in YStore file at: {ystore_path}")
+
     except Exception as e:
-        logger.error(f"Failed to re-create YStore file {ystore_path}: {e}", exc_info=True)
+        logger.error(f"Failed to reset YStore database at {ystore_path}: {e}", exc_info=True)
 
 
 def extract_output(output: dict) -> str:
@@ -1201,6 +1219,12 @@ if __name__ == "__main__":
     os.makedirs(root_dir, exist_ok=True)
     if not os.path.exists(os.path.join(root_dir, NOTEBOOK_PATH)):
         create_empty_notebook_file(os.path.join(root_dir, NOTEBOOK_PATH))
+
+    # Clear all files with .jupyter_ystore*.db extensions
+    for filename in os.listdir(root_dir):
+        if filename.startswith(".jupyter_ystore") and filename.endswith(".db"):
+            os.remove(os.path.join(root_dir, filename))
+            logger.info(f"Removed temporary YStore file: {filename}")
 
     config_path = "~/.jupyter/lab/user-settings/@jupyterlab/apputils-extension/themes.jupyterlab-settings"
     if not os.path.exists(os.path.expanduser(config_path)):
