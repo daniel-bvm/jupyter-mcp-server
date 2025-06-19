@@ -31,6 +31,8 @@ import sys
 import json
 from typing import Any
 import string
+import sqlite3
+
 
 def remove_unsafe_characters(text: str) -> str:
     return "".join(c for c in text if c in string.printable)
@@ -99,6 +101,44 @@ def _parse_index_from_message(message: str) -> Optional[int]:
     logger.error(f"Could not find index pattern in message: {message}")
     return None
 
+
+def _cleanup_ystore_file():
+    ystore_path = os.path.join(root_dir, ".jupyter_ystore.db")
+
+    try:
+        conn = sqlite3.connect(ystore_path)
+        cursor = conn.cursor()
+
+        # Step 1: Drop existing tables if they exist
+        cursor.execute("DROP TABLE IF EXISTS updates;")
+        cursor.execute("DROP TABLE IF EXISTS yupdates;")
+        logger.info(f"Dropped existing tables in {ystore_path}")
+
+        # Step 2: Re-create the necessary tables
+        cursor.execute("""
+            CREATE TABLE updates (
+                path TEXT NOT NULL,
+                yupdate BLOB,
+                metadata BLOB,
+                timestamp REAL NOT NULL
+            );
+        """)
+        cursor.execute("""
+            CREATE TABLE yupdates (
+                path TEXT NOT NULL,
+                yupdate BLOB,
+                metadata BLOB,
+                timestamp REAL NOT NULL
+            );
+        """)
+        conn.commit()
+        conn.close()
+        logger.info(f"Recreated tables in YStore file at: {ystore_path}")
+
+    except Exception as e:
+        logger.error(f"Failed to reset YStore database at {ystore_path}: {e}", exc_info=True)
+
+
 def extract_output(output: dict) -> str:
     """Extracts readable output from a Jupyter cell output dictionary."""
     # (Implementation remains the same as before)
@@ -126,6 +166,7 @@ def extract_output(output: dict) -> str:
 @asynccontextmanager
 async def notebook_connection(tool_name: str, modify: bool = False) -> AsyncGenerator[NbModelClient, None]:
     """Provides a managed connection to the NbModelClient."""
+    # _cleanup_ystore_file()  # Ensure cleanup of YStore file
     notebook: Optional[NbModelClient] = None
     logger.debug(f"[{tool_name}] Establishing notebook connection...")
     try:
@@ -440,6 +481,7 @@ async def insert_cell(content: str, cell_type: str, index: Optional[int] = None)
         return f"[Error: Invalid cell_type '{cell_type}'. Must be 'code' or 'markdown'.]"
 
     try:
+        _cleanup_ystore_file()  # Ensure cleanup of YStore file
         async with notebook_connection(tool_name, modify=True) as notebook:
             ydoc = notebook._doc
             ycells = ydoc._ycells
@@ -495,6 +537,7 @@ async def add_code_cell_at_bottom(cell_content: str) -> str:
     logger.info(f"Executing {tool_name} with cell_content:\n{cell_content}")
     try:
         # Use context manager even though we call library method
+        _cleanup_ystore_file()  # Ensure cleanup of YStore file
         async with notebook_connection(tool_name, modify=True) as notebook:
              _try_set_awareness(notebook, tool_name) # Set awareness if needed
              # Use the library's potentially more reliable method
@@ -539,6 +582,7 @@ async def execute_cell(cell_index: int) -> str:
     try:
         # Need a brief notebook connection to validate index/type and dispatch execution
         # No modification needed for dispatch itself, but underlying state might change later
+        _cleanup_ystore_file()  # Ensure cleanup of YStore file
         async with notebook_connection(tool_name, modify=False) as notebook:
             ydoc = notebook._doc
             ycells = ydoc._ycells
@@ -556,7 +600,7 @@ async def execute_cell(cell_index: int) -> str:
                 await asyncio.to_thread(notebook.execute_cell, cell_index, kernel)
                 logger.info(f"[{tool_name}] Execution request dispatched for cell {cell_index}.")
                 output = await get_cell_output(cell_index)
-                return f"Execution request sent for cell at index {cell_index}. Output: {output[-2000:] if len(output) > 2000 else output}"
+                return f"Execution request sent for cell at index {cell_index}. Output: {output[-6000:] if len(output) > 6000 else output}"
             except Exception as exec_dispatch_err:
                 logger.error(f"[{tool_name}] Error dispatching execution request: {exec_dispatch_err}", exc_info=True)
                 return f"[Error dispatching execution for cell {cell_index}: {exec_dispatch_err}]"
@@ -596,6 +640,7 @@ async def execute_all_cells() -> str:
     request_error = None
 
     try:
+        _cleanup_ystore_file()  # Ensure cleanup of YStore file
         async with notebook_connection(tool_name, modify=False) as notebook:
             ydoc = notebook._doc
             ycells = ydoc._ycells
@@ -648,6 +693,7 @@ async def get_cell_output(cell_index: int, wait_seconds: float = OUTPUT_WAIT_DEL
 
     try:
         # Read-only operation
+        _cleanup_ystore_file()  # Ensure cleanup of YStore file
         async with notebook_connection(tool_name, modify=False) as notebook:
             ydoc = notebook._doc
             ycells = ydoc._ycells
@@ -697,6 +743,7 @@ async def delete_cell(cell_index: int) -> str:
     tool_name = "delete_cell"
     logger.info(f"Executing {tool_name} for cell index {cell_index}")
     try:
+        _cleanup_ystore_file()  # Ensure cleanup of YStore file
         async with notebook_connection(tool_name, modify=True) as notebook:
             ydoc = notebook._doc
             ycells = ydoc._ycells
@@ -726,6 +773,7 @@ async def move_cell(from_index: int, to_index: int) -> str:
     tool_name = "move_cell"
     logger.info(f"Executing {tool_name} from {from_index} to {to_index}")
     try:
+        _cleanup_ystore_file()  # Ensure cleanup of YStore file
         async with notebook_connection(tool_name, modify=True) as notebook:
             ydoc = notebook._doc
             ycells = ydoc._ycells
@@ -761,6 +809,7 @@ async def clear_notebook() -> str:
     logger.info(f"Executing {tool_name} tool.")
 
     try:
+        _cleanup_ystore_file()  # Ensure cleanup of YStore file
         async with notebook_connection(tool_name, modify=True) as notebook:
             ydoc = notebook._doc
             ycells = ydoc._ycells
@@ -839,6 +888,7 @@ async def split_cell(cell_index: int, line_number: int) -> str:
     if line_number < 1: return "[Error: line_number must be 1 or greater]"
 
     try:
+        _cleanup_ystore_file()  # Ensure cleanup of YStore file
         async with notebook_connection(tool_name, modify=True) as notebook:
             ydoc = notebook._doc
             ycells = ydoc._ycells
@@ -912,6 +962,7 @@ async def get_all_cells() -> list[dict[str, Any]]:
     logger.info(f"Executing {tool_name} tool.")
     all_cells_data = []
     try:
+        _cleanup_ystore_file()  # Ensure cleanup of YStore file
         async with notebook_connection(tool_name, modify=False) as notebook:
             ydoc = notebook._doc
             ycells = ydoc._ycells
@@ -940,6 +991,7 @@ async def edit_cell_source(cell_index: int, new_content: str) -> str:
     tool_name = "edit_cell_source"
     logger.info(f"Executing {tool_name} for cell index {cell_index}")
     try:
+        _cleanup_ystore_file()  # Ensure cleanup of YStore file
         async with notebook_connection(tool_name, modify=True) as notebook:
             ydoc = notebook._doc
             ycells = ydoc._ycells
@@ -996,6 +1048,7 @@ async def get_all_outputs() -> dict[int, str]:
     logger.info(f"Executing {tool_name} tool.")
     all_outputs_map = {}
     try:
+        _cleanup_ystore_file()  # Ensure cleanup of YStore file
         async with notebook_connection(tool_name, modify=False) as notebook:
             ydoc = notebook._doc
             ycells = ydoc._ycells
@@ -1167,6 +1220,12 @@ if __name__ == "__main__":
     if not os.path.exists(os.path.join(root_dir, NOTEBOOK_PATH)):
         create_empty_notebook_file(os.path.join(root_dir, NOTEBOOK_PATH))
 
+    # Clear all files with .jupyter_ystore*.db extensions
+    for filename in os.listdir(root_dir):
+        if filename.startswith(".jupyter_ystore") and filename.endswith(".db"):
+            os.remove(os.path.join(root_dir, filename))
+            logger.info(f"Removed temporary YStore file: {filename}")
+
     config_path = "~/.jupyter/lab/user-settings/@jupyterlab/apputils-extension/themes.jupyterlab-settings"
     if not os.path.exists(os.path.expanduser(config_path)):
         os.makedirs(os.path.dirname(os.path.expanduser(config_path)), exist_ok=True)
@@ -1263,6 +1322,8 @@ if __name__ == "__main__":
                     # Re-create the file to ensure a clean state
                     with open(ystore_path, 'w') as f:
                         f.write("")
+
+                _cleanup_ystore_file()  # Clean up any leftover YStore file
 
                 await main()  # Proceed to main MCP loop
 
