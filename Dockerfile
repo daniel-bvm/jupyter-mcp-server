@@ -21,4 +21,4 @@ RUN pip install --force-reinstall --no-cache-dir pycrdt
 COPY config.json config.json
 COPY system_prompt.txt system_prompt.txt
 
-env NO_STREAMING=1
+env NO_STREAMING=0
