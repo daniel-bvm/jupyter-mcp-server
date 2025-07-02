@@ -139,6 +139,14 @@ def _cleanup_ystore_file():
         logger.error(f"Failed to reset YStore database at {ystore_path}: {e}", exc_info=True)
 
 
+def _clean_traceback(traceback_lines):
+    # Remove ANSI color codes
+    cleaned = [re.sub(r'\u001b\[[0-9;]*m', '', line) for line in traceback_lines]
+    # Remove lines that are just dashes or empty
+    cleaned = [line for line in cleaned if line.strip() and not set(line.strip()) <= set('-')]
+    return cleaned
+
+
 def extract_output(output: dict) -> str:
     """Extracts readable output from a Jupyter cell output dictionary."""
     # (Implementation remains the same as before)
@@ -157,7 +165,14 @@ def extract_output(output: dict) -> str:
             return f"[{output_type} Data: keys={list(data.keys())}]"
     elif output_type == "error":
         # Consider returning more from traceback if needed, kept simple for now
-        return f"Error: {output.get('ename', 'Unknown')}: {output.get('evalue', '')}"
+        traceback = output.get('traceback', [])
+        traceback = _clean_traceback(traceback)
+        traceback_str = "\n".join(traceback)
+
+        error_message = f"Error: {output.get('ename', 'Unknown')}: {output.get('evalue', '')}."
+        if traceback_str.strip() != "":
+            error_message = traceback_str
+        return error_message
     else:
         return f"[Unknown output type: {output_type}]"
 
