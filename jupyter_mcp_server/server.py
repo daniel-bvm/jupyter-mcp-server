@@ -568,7 +568,7 @@ async def add_code_cell_at_bottom(cell_content: str) -> str:
 
 
 @mcp.tool()
-async def execute_cell(cell_index: int) -> str:
+async def execute_cell(cell_index: int | str) -> str:
     """
     Sends request to execute a specific code cell by index (fire-and-forget).
     Uses asyncio.to_thread to avoid blocking. Does NOT wait for completion.
@@ -579,6 +579,11 @@ async def execute_cell(cell_index: int) -> str:
     tool_name = "execute_cell"
     global kernel # Needs the kernel client
     logger.info(f"Executing {tool_name} for cell index {cell_index}")
+    if not isinstance(cell_index, int):
+        try:
+            cell_index = int(cell_index)  # Convert string index to int
+        except ValueError:
+            return f"[Error: Invalid cell index '{cell_index}'. Must be an integer.]"
 
     # Ensure kernel is available and alive, attempt restart if not
     if not kernel or not kernel.is_alive():
@@ -1001,10 +1006,15 @@ async def get_all_cells() -> list[dict[str, Any]]:
 
 
 @mcp.tool()
-async def edit_cell_source(cell_index: int, new_content: str) -> str:
+async def edit_cell_source(cell_index: int | str, new_content: str) -> str:
     """Edits the source content of a specific cell by its index."""
     tool_name = "edit_cell_source"
     logger.info(f"Executing {tool_name} for cell index {cell_index}")
+    if not isinstance(cell_index, int):
+        try:
+            cell_index = int(cell_index)  # Convert string index to int
+        except ValueError:
+            return f"[Error: Invalid cell index '{cell_index}'. Must be an integer.]"
     try:
         _cleanup_ystore_file()  # Ensure cleanup of YStore file
         async with notebook_connection(tool_name, modify=True) as notebook:
