@@ -26,6 +26,25 @@ Bridge the gap between AI models and live computational environments, enabling s
 
 ### 🔧 Core Components
 
+```mermaid
+graph TB
+    A[🤖 AI Model/Client] --> B[📡 MCP Server<br/>FastMCP]
+    B --> C[📓 Notebook Client<br/>NbModelClient]
+    B --> D[⚡ Kernel Client<br/>KernelClient]
+    C --> E[🌐 WebSocket Connection]
+    E --> F[📊 JupyterLab Instance]
+    F --> G[📝 YJS Integration<br/>Real-time Sync]
+    D --> H[🐍 Python Kernel]
+    H --> I[💻 Code Execution]
+
+    J[🐳 Docker Container] --> B
+    J --> C
+    J --> D
+
+```
+
+**Component Details:**
+
 1. **MCP Server (`FastMCP`)** - Handles protocol communication and tool routing
 2. **Notebook Client (`NbModelClient`)** - WebSocket connection to JupyterLab for real-time sync
 3. **Kernel Client (`KernelClient`)** - Direct kernel communication for code execution
@@ -58,6 +77,70 @@ Bridge the gap between AI models and live computational environments, enabling s
 | Tool Name | Description | Parameters | Usage |
 |-----------|-------------|------------|-------|
 | `internet_search` | Search web content | `query: str` | External information |
+
+---
+
+## 🎯 Use Cases
+
+### 📊 Data Science Workflows
+
+**Scenario:** Interactive data analysis with AI assistance
+
+- AI can dynamically create cells for data loading, exploration, and visualization
+- Real-time execution feedback allows for iterative analysis
+- Collaborative editing enables team-based data science projects
+
+**Example Flow:**
+
+1. AI creates data loading cell with `add_code_cell_at_bottom`
+2. Executes cell with `execute_cell` to validate data import
+3. Inserts analysis cells at specific positions with `insert_cell`
+4. Modifies existing analysis based on results using `edit_cell_source`
+
+### 🤖 AI-Assisted Development
+
+**Scenario:** Code generation and debugging support
+
+- AI can write, test, and refine code in real-time
+- Immediate execution feedback for code validation
+- Systematic debugging through cell-by-cell execution
+
+**Example Flow:**
+
+1. AI generates initial code structure
+2. Tests each component individually through `execute_cell`
+3. Refines code based on execution results
+4. Organizes final solution by inserting/editing cells
+
+### 📚 Educational Content Creation
+
+**Scenario:** Interactive tutorials and demonstrations
+
+- Dynamic content generation based on learning objectives
+- Real-time code execution for immediate feedback
+- Collaborative notebook editing for group learning
+
+**Example Flow:**
+
+1. AI creates educational content with explanatory cells
+2. Adds interactive code examples
+3. Executes examples to demonstrate concepts
+4. Modifies content based on learner feedback
+
+### 🔬 Research and Experimentation
+
+**Scenario:** Hypothesis testing and experimental workflows
+
+- Systematic experiment design through structured cell organization
+- Real-time result analysis and interpretation
+- Collaborative research environment
+
+**Example Flow:**
+
+1. AI designs experiment structure with multiple cells
+2. Executes experiments sequentially
+3. Analyzes results and generates insights
+4. Refines experimental approach based on findings
 
 ---
 
