@@ -1,28 +1,30 @@
-# Technical Report: Spark Agent
+# 🚀 Technical Report: Spark Agent
 
 ---
 
-## Executive Summary
+## 📋 Executive Summary
 
 The Spark Agent is an advanced agent that enables rich, interactive communication between AI models and live Jupyter notebooks through the Model Context Protocol (MCP). This extended version provides **several specialized tools** for comprehensive notebook manipulation, code execution, file management, and kernel interaction, significantly expanding upon the original 2-3 tools of the base implementation.
 
-## Project Overview
+## 🏗️ Project Overview
 
-### Key Information
+### 🔑 Key Information
+
 - **Repository:** Enhanced fork of Datalayer's jupyter-mcp-server
 - **Primary Language:** Python (>=3.10 required)
 - **Architecture:** Docker-containerized MCP server with WebSocket connections
 - **Main Dependencies:** JupyterLab, jupyter_collaboration==2.0.1, pycrdt, FastMCP
 - **Target Environment:** JupyterLab with collaborative editing support
 
-### Core Purpose
+### 🎯 Core Purpose
+
 Bridge the gap between AI models and live computational environments, enabling seamless notebook manipulation through a well-defined protocol interface for complex data science workflows.
 
 ---
 
-## Technical Architecture
+## ⚙️ Technical Architecture
 
-### Core Components
+### 🔧 Core Components
 
 1. **MCP Server (`FastMCP`)** - Handles protocol communication and tool routing
 2. **Notebook Client (`NbModelClient`)** - WebSocket connection to JupyterLab for real-time sync
@@ -32,9 +34,9 @@ Bridge the gap between AI models and live computational environments, enabling s
 
 ---
 
-## Available Tools
+## 🛠️ Available Tools
 
-### 1. Cell Management Tools
+### 1. 📝 Cell Management Tools
 
 | Tool Name | Description | Parameters | Usage |
 |-----------|-------------|------------|-------|
@@ -45,13 +47,13 @@ Bridge the gap between AI models and live computational environments, enabling s
 | `edit_cell_source` | Modify cell content | `cell_index: int, new_content: str` | Code editing |
 | `clear_notebook` | Remove all cells | None | Fresh start |
 
-### 2. Code Execution Tools
+### 2. ⚡ Code Execution Tools
 
 | Tool Name | Description | Parameters | Usage |
 |-----------|-------------|------------|-------|
 | `execute_cell` | Execute single cell (async) | `cell_index: int` | Run specific code |
 
-### 3. Utility Tools
+### 3. 🔧 Utility Tools
 
 | Tool Name | Description | Parameters | Usage |
 |-----------|-------------|------------|-------|
@@ -59,18 +61,18 @@ Bridge the gap between AI models and live computational environments, enabling s
 
 ---
 
-## Setup and Installation
+## 🔧 Setup and Installation
 
-### Prerequisites
+### 📋 Prerequisites
 
-- **Python:** >= 3.10 (recommend Conda environment)
-- **Docker:** For containerized execution
-- **JupyterLab:** Running instance with collaboration extension
-- **MCP Client:** Such as Claude Desktop
+- **🐍 Python:** >= 3.10 (recommend Conda environment)
+- **🐳 Docker:** For containerized execution
+- **📊 JupyterLab:** Running instance with collaboration extension
+- **🤖 MCP Client:** Such as Claude Desktop
 
 ---
 
-## Conclusion
+## 🎯 Conclusion
 
 The Spark Agent represents a sophisticated agent for AI-driven notebook interaction, providing comprehensive tools for code execution and file management. Its robust architecture, extensive error handling, and real-time synchronization capabilities make it suitable for complex data science workflows and interactive AI assistance scenarios.
 
