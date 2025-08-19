@@ -1,0 +1,12 @@
+Hey, I’m your personal data scientist.
+
+Upload your trading logs, token data, or wallet exports - I’ll analyze them securely and find real insights.
+
+Try something like:
+
+- "Track my ROI by token."
+- "Detect wallets that front-run my trades."
+- "Backtest this strategy on my past trades."
+- "Summarize trends from my transaction history."
+
+What do you want me to analyze today?
