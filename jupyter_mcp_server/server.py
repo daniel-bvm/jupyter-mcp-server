@@ -25,7 +25,7 @@ from jupyter_nbmodel_client import (
     NbModelClient,
     get_jupyter_notebook_websocket_url,
 )
-from mcp.server.fastmcp import FastMCP, Image as MCPImage
+from fastmcp import FastMCP, Image as MCPImage
 import asyncio
 import sys
 import json
@@ -541,8 +541,14 @@ async def insert_cell(
     name="add_code_cell_at_bottom",
     description="Append new code cell at the end of the notebook. Executes the cell after adding and gets the result.",
 )
-async def add_code_cell_at_bottom(
+async def add_code_cell_at_bottom_tool(
     cell_content: Annotated[str, "The content of the new code cell"],
+) -> str:
+    return await add_code_cell_at_bottom(cell_content)
+
+
+async def add_code_cell_at_bottom(
+    cell_content: str,
 ) -> str:
     # This now uses the library directly, which was deemed more stable previously
     # If add_cell with manual YMap creation is stable, this could be removed.
@@ -564,13 +570,18 @@ async def add_code_cell_at_bottom(
         logger.error(f"[{tool_name}] Tool execution failed: {e}", exc_info=True)
         return f"[Error adding code cell at bottom: {e}]"
 
-
 @mcp.tool(
     name="execute_cell",
     description="Sends request to execute a specific code cell by index (fire-and-forget). Uses asyncio.to_thread to avoid blocking. Does NOT wait for completion.",
 )
+async def execute_cell_tool(
+    cell_index: Annotated[int, "The 0-based index of the code cell to execute."],
+) -> str:
+    return await execute_cell(cell_index)
+
+
 async def execute_cell(
-    cell_index: Annotated[int | str, "The 0-based index of the code cell to execute."],
+    cell_index: int,
 ) -> str:
     tool_name = "execute_cell"
     global kernel # Needs the kernel client
@@ -752,13 +763,18 @@ async def get_cell_output(cell_index: int, wait_seconds: float = OUTPUT_WAIT_DEL
         logger.error(f"[{tool_name}] Tool execution failed for index {cell_index}: {e}", exc_info=True)
         return f"[Error getting output for cell {cell_index}: {e}]"
 
-
 @mcp.tool(
     name="delete_cell",
     description="Deletes a specific cell by its index.",
 )
-async def delete_cell(
+async def delete_cell_tool(
     cell_index: Annotated[int, "The index of the cell to delete"]
+) -> str:
+    return await delete_cell(cell_index)
+
+
+async def delete_cell(
+    cell_index: int,
 ) -> str:
     tool_name = "delete_cell"
     logger.info(f"Executing {tool_name} for cell index {cell_index}")
@@ -826,6 +842,9 @@ async def move_cell(from_index: int, to_index: int) -> str:
     name="clear_notebook",
     description="Clears all cells from the notebook.",
 )
+async def clear_notebook_tool() -> str:
+    return await clear_notebook()
+
 async def clear_notebook() -> str:
     tool_name = "clear_notebook"
     logger.info(f"Executing {tool_name} tool.")
@@ -981,6 +1000,9 @@ async def split_cell(cell_index: int, line_number: int) -> str:
     name="get_all_cells",
     description="Retrieves basic info for all cells (index, type, source, exec_count).",
 )
+async def get_all_cells_tool() -> list[dict[str, Any]]:
+    return await get_all_cells()
+
 async def get_all_cells() -> list[dict[str, Any]]:
     tool_name = "get_all_cells"
     logger.info(f"Executing {tool_name} tool.")
@@ -1013,9 +1035,16 @@ async def get_all_cells() -> list[dict[str, Any]]:
     name="edit_cell_source",
     description="Edits the source content of a specific cell by its index.",
 )
-async def edit_cell_source(
-    cell_index: Annotated[int | str, "The index of the cell to edit"],
+async def edit_cell_source_tool(
+    cell_index: Annotated[int, "The index of the cell to edit"],
     new_content: Annotated[str, "The new content of the cell"],
+) -> str:
+    return await edit_cell_source(cell_index, new_content)
+
+
+async def edit_cell_source(
+    cell_index: int,
+    new_content: str,
 ) -> str:
     tool_name = "edit_cell_source"
     logger.info(f"Executing {tool_name} for cell index {cell_index}")
@@ -1054,6 +1083,16 @@ async def edit_cell_source(
     except Exception as e:
         logger.error(f"[{tool_name}] Tool execution failed for index {cell_index}: {e}", exc_info=True)
         return f"[Error editing cell {cell_index}: {e}]"
+
+
+@mcp.tool(
+    name="get_kernel_variables",
+    description="Lists variables in the kernel namespace using %whos via a temporary cell.",
+)
+async def get_kernel_variables_tool(
+    wait_seconds: Annotated[int, "Seconds to wait for execution. Default 2."] = 2,
+) -> str:
+    return await get_kernel_variables(wait_seconds)
 
 
 async def get_kernel_variables(wait_seconds: int = 2) -> str:
@@ -1203,8 +1242,14 @@ async def run_terminal_command(command: str):
     name="internet_search",
     description="Search the general related information on the Internet. Only use this tool if you fail to find the information with inserting code to Python notebook.",
 )
-async def internet_search(
+async def internet_search_tool(
     query: Annotated[str, "Query to search for"],
+) -> str:
+    return await internet_search(query)
+
+
+async def internet_search(
+    query: str,
 ) -> str:
     request_payload = {
         "url": "https://api.tavily.com/search",

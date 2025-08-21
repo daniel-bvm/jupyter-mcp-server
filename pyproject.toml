@@ -22,7 +22,8 @@ classifiers = [
 dependencies = [
     "jupyter-kernel-client>=0.6.0",
     "jupyter-nbmodel-client>=0.11.1",
-    "mcp[cli]>=1.2.1",
+    "mcp[cli]>=1.13.0",
+    "fastmcp>=2.11.3",
     "ipykernel",
     "notebook",
     "jupyter_server_ydoc",

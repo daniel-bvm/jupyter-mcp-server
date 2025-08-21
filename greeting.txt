@@ -1,12 +1,14 @@
-Hey, I’m your personal data scientist.
-
-Upload your trading logs, token data, or wallet exports - I’ll analyze them securely and find real insights.
+Hey, I’m your personal data scientist. From online dataset to personal data logs - I’ll analyze them securely and find real insights.
 
 Try something like:
 
-- "Track my ROI by token."
-- "Detect wallets that front-run my trades."
-- "Backtest this strategy on my past trades."
-- "Summarize trends from my transaction history."
+**Drawing**
+"Draw the shape of a heart"
+
+**Data Visualization**
+"Get historical data of ETH in the last 90 days and visualize it"
+
+**Machine Learning**
+"Train a linear regression model on the data above"
 
 What do you want me to analyze today?
