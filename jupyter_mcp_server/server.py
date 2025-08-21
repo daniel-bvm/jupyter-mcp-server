@@ -8,7 +8,7 @@ import os
 import subprocess
 import time
 import asyncio
-from typing import Any, List, Dict, Optional, AsyncGenerator # Added AsyncGenerator
+from typing import Any, List, Dict, Literal, Optional, AsyncGenerator # Added AsyncGenerator
 import nbformat
 import requests
 from urllib.parse import urljoin, quote
@@ -32,6 +32,7 @@ import json
 from typing import Any
 import string
 import sqlite3
+from typing import Annotated
 
 
 def remove_unsafe_characters(text: str) -> str:
@@ -478,16 +479,15 @@ def set_target_notebook(new_notebook_path: str) -> str:
 
 
 
-async def insert_cell(content: str, cell_type: str, index: Optional[int] = None) -> str:
+async def insert_cell(
+    content: Annotated[str, "Source content for the new cell."],
+    cell_type: Annotated[Literal["code", "markdown"], "Must be 'code' or 'markdown'."],
+    index: Annotated[Optional[int], "0-based index to insert at; appends if None or invalid."] = None
+) -> str:
     """
     Adds a cell ('code' or 'markdown') with content at specified index (or appends).
     Uses robust Yjs type creation including YMap for metadata.
     Executes the cell after adding and gets the result.
-
-    Args:
-        content: Source content for the new cell.
-        cell_type: Must be 'code' or 'markdown'.
-        index: 0-based index to insert at; appends if None or invalid.
     """
     tool_name = "insert_cell"
     logger.info(f"Executing {tool_name}. Type: {cell_type}, Index: {index}")
@@ -537,15 +537,13 @@ async def insert_cell(content: str, cell_type: str, index: Optional[int] = None)
         return f"[Error adding {cell_type} cell: {e}]"
 
 
-@mcp.tool()
-async def add_code_cell_at_bottom(cell_content: str) -> str:
-    """
-    Append new code cell at the end of the notebook.
-    Executes the cell after adding and gets the result.
-
-    Args:
-        cell_content: Code content for the new cell.
-    """
+@mcp.tool(
+    name="add_code_cell_at_bottom",
+    description="Append new code cell at the end of the notebook. Executes the cell after adding and gets the result.",
+)
+async def add_code_cell_at_bottom(
+    cell_content: Annotated[str, "The content of the new code cell"],
+) -> str:
     # This now uses the library directly, which was deemed more stable previously
     # If add_cell with manual YMap creation is stable, this could be removed.
     tool_name = "add_code_cell_at_bottom"
@@ -567,15 +565,13 @@ async def add_code_cell_at_bottom(cell_content: str) -> str:
         return f"[Error adding code cell at bottom: {e}]"
 
 
-@mcp.tool()
-async def execute_cell(cell_index: int | str) -> str:
-    """
-    Sends request to execute a specific code cell by index (fire-and-forget).
-    Uses asyncio.to_thread to avoid blocking. Does NOT wait for completion.
-
-    Args:
-        cell_index: The 0-based index of the code cell to execute.
-    """
+@mcp.tool(
+    name="execute_cell",
+    description="Sends request to execute a specific code cell by index (fire-and-forget). Uses asyncio.to_thread to avoid blocking. Does NOT wait for completion.",
+)
+async def execute_cell(
+    cell_index: Annotated[int | str, "The 0-based index of the code cell to execute."],
+) -> str:
     tool_name = "execute_cell"
     global kernel # Needs the kernel client
     logger.info(f"Executing {tool_name} for cell index {cell_index}")
@@ -757,9 +753,13 @@ async def get_cell_output(cell_index: int, wait_seconds: float = OUTPUT_WAIT_DEL
         return f"[Error getting output for cell {cell_index}: {e}]"
 
 
-@mcp.tool()
-async def delete_cell(cell_index: int) -> str:
-    """Deletes a specific cell by its index."""
+@mcp.tool(
+    name="delete_cell",
+    description="Deletes a specific cell by its index.",
+)
+async def delete_cell(
+    cell_index: Annotated[int, "The index of the cell to delete"]
+) -> str:
     tool_name = "delete_cell"
     logger.info(f"Executing {tool_name} for cell index {cell_index}")
     try:
@@ -822,9 +822,11 @@ async def move_cell(from_index: int, to_index: int) -> str:
         return f"[Error moving cell from {from_index} to {to_index}: {e}]"
 
 
-@mcp.tool()
+@mcp.tool(
+    name="clear_notebook",
+    description="Clears all cells from the notebook.",
+)
 async def clear_notebook() -> str:
-    """Clears all cells from the notebook."""
     tool_name = "clear_notebook"
     logger.info(f"Executing {tool_name} tool.")
 
@@ -975,9 +977,11 @@ async def split_cell(cell_index: int, line_number: int) -> str:
         return f"[Error splitting cell {cell_index}: {e}]"
 
 
-@mcp.tool()
+@mcp.tool(
+    name="get_all_cells",
+    description="Retrieves basic info for all cells (index, type, source, exec_count).",
+)
 async def get_all_cells() -> list[dict[str, Any]]:
-    """Retrieves basic info for all cells (index, type, source, exec_count)."""
     tool_name = "get_all_cells"
     logger.info(f"Executing {tool_name} tool.")
     all_cells_data = []
@@ -1005,9 +1009,14 @@ async def get_all_cells() -> list[dict[str, Any]]:
         return [{"error": f"Error during cell retrieval: {e}"}]
 
 
-@mcp.tool()
-async def edit_cell_source(cell_index: int | str, new_content: str) -> str:
-    """Edits the source content of a specific cell by its index."""
+@mcp.tool(
+    name="edit_cell_source",
+    description="Edits the source content of a specific cell by its index.",
+)
+async def edit_cell_source(
+    cell_index: Annotated[int | str, "The index of the cell to edit"],
+    new_content: Annotated[str, "The new content of the cell"],
+) -> str:
     tool_name = "edit_cell_source"
     logger.info(f"Executing {tool_name} for cell index {cell_index}")
     if not isinstance(cell_index, int):
@@ -1190,18 +1199,13 @@ async def run_terminal_command(command: str):
     return result
 
 
-@mcp.tool()
-async def internet_search(query: str) -> str:
-    """
-    Search the general related information on the Internet.
-    Only use this tool if you fail to find the information with inserting code to Python notebook.
-
-    Args:
-        query: Query to search for
-
-    Returns: Related information
-    """
-
+@mcp.tool(
+    name="internet_search",
+    description="Search the general related information on the Internet. Only use this tool if you fail to find the information with inserting code to Python notebook.",
+)
+async def internet_search(
+    query: Annotated[str, "Query to search for"],
+) -> str:
     request_payload = {
         "url": "https://api.tavily.com/search",
         "headers": {

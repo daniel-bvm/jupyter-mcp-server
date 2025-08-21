@@ -7,7 +7,7 @@ ENV NOTEBOOK_PATH="notebook.ipynb"
 ENV NOTEBOOK_PORT="34587"
 ENV HTTP_DISPLAY_URL="http://localhost:$NOTEBOOK_PORT/notebooks/$NOTEBOOK_PATH"
 ENV PIP_ROOT_USER_ACTION=ignore
-ENV ETERNALAI_MCP_PROXY_URL=http://proxy-agent:4000/prompt
+ENV LLM_MODEL_ID="zai-org/GLM-4.5-Air-FP8"
 
 RUN pip install .
 
